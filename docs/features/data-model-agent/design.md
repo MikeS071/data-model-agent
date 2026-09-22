@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 5
+revision: 6
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -46,23 +46,30 @@ when the intake is ready. Deleting a project is an explicit confirmed action tha
 the project and its cascading source, working-draft and version records; cancellation
 must leave all records unchanged.
 
-After a working draft exists, a project-scoped chat shares the workbench with the
-structured model editor. Each user message is sent with the current canonical model and
-bounded recent conversation context. The provider returns both a concise assistant reply
-and a complete proposed canonical draft under structured output; local validation must
-pass before the draft and both chat messages are saved together. The editor remains the
-authoritative, directly editable view, so LLM changes are immediately visible beside the
-conversation that requested them.
+After a working draft exists, a project-scoped chat shares the top of the workbench with
+the live model output. Each user message is sent with the current canonical model, the
+next unresolved clarification when one exists, and bounded recent conversation context.
+Clarifications are ordinary guided chat turns rather than a separate form: answering the
+question asks the provider to update the model and advance or clear the clarification
+queue. The provider returns both a concise assistant reply and a complete proposed
+canonical draft under structured output; local validation must pass before the draft and
+both chat messages are saved together. The structured editor remains the authoritative,
+directly editable view below the collaboration row, so conversational changes are
+immediately visible in the model output and editor.
 
 Use the project-local UI/UX Pro Max output in
 `design-system/data-model-agent/MASTER.md` as the visual interaction contract. Present the
 application as a calm, data-dense enterprise workbench rather than a marketing page. A
-compact product header exposes local-pilot and save state. Desktop uses model navigation,
-a focused editing canvas and a nearby preview/review rail; smaller screens stack those
-regions without horizontal page scroll. Entity details use accessible progressive
+compact product header exposes local-pilot and save state. Desktop places live model
+output and project chat side by side at the top, followed by the full-width structured
+editor and history; assumptions and warnings form the final review section. Smaller
+screens stack those regions in the same reading order without horizontal page scroll.
+Entity details use accessible progressive
 disclosure so a large model remains scannable, while relationships, rules, preview,
 downloads and version history remain discoverable. Semantic colors, persistent labels,
 native controls, visible focus, live status and reduced-motion behavior are required.
+All buttons share one font family, weight, sizing rhythm, radius and focus treatment;
+semantic variants change color without changing their typographic character.
 
 ## Alternatives considered
 
@@ -109,15 +116,15 @@ sequenceDiagram
   Domain-->>App: Valid draft or typed validation failure
   App->>DB: Autosave working draft and source material
   App-->>UI: Draft, assumptions, warnings and next question
-  Michal->>UI: Edit structured model
-  UI->>App: Autosave edited draft
-  Michal->>UI: Ask project chat to change the model
+  Michal->>UI: Answer clarification or request a change in chat
   UI->>App: Message plus current project context
-  App->>AI: Current canonical model and bounded chat context
+  App->>AI: Current canonical model, next question and bounded chat context
   AI-->>App: Assistant reply plus complete revised draft
   App->>Domain: Validate revised canonical model
   App->>DB: Atomically save chat turn and working draft
   App-->>UI: Updated model beside assistant reply
+  Michal->>UI: Edit structured model below live output
+  UI->>App: Autosave edited draft
   Michal->>UI: Save Version
   App->>DB: Commit immutable snapshot
   App-->>UI: Mermaid and draw.io previews and downloads
@@ -178,9 +185,11 @@ provider output being valid: it parses and validates locally before persistence.
 replace the adapter and never make a network call.
 
 Chat uses a separate structured-output contract over the same provider boundary. It sends
-the current requirements, canonical model, bounded source context, a bounded recent chat
-history and the new message. A chat response must contain a non-empty assistant reply and
-a complete generation result; partial patches are not applied to the canonical model.
+the current requirements, canonical model, bounded source context, next unresolved
+clarification, a bounded recent chat history and the new message. When the message answers
+that clarification, the complete result must apply the answer to the model and advance or
+clear the clarification queue. A chat response must contain a non-empty assistant reply
+and a complete generation result; partial patches are not applied to the canonical model.
 
 SQLite is reachable only through the repository interface. Renderers are pure functions
 over a validated canonical model. Download endpoints derive safe filenames, set explicit
@@ -220,7 +229,8 @@ response leaves both the current draft and transcript unchanged, making retry ex
 
 Malformed or schema-invalid model output is never stored as a canonical model; validation
 details become a bounded error and may drive a new generation attempt. Domain ambiguity
-produces a visible draft and one clarification question at a time. SQLite transaction
+produces a visible draft and one clarification question at a time inside the chat
+workflow. SQLite transaction
 failure leaves the prior draft/version intact. Renderer failure blocks Save Version so a
 version can never claim both representations when one is missing. Any newly discovered
 material architecture or acceptance gap stops implementation for document revision and
@@ -280,6 +290,7 @@ of scope.
 | D-014 | Make synchronous OpenAI generation bounds configurable, defaulting to a 120-second timeout, low reasoning effort and 8,000 generated tokens, with typed non-sensitive diagnostics. | The original fixed 45-second deadline aborted valid `gpt-5.6-sol` structured-output work while connectivity and model access were healthy. | Keep the fixed deadline; immediately adopt streaming/background jobs; hard-code a faster model. | Operators can tune latency without source edits; capped incomplete responses fail explicitly; streaming remains a later measured improvement. |
 | D-015 | Treat project intake as a saved lifecycle stage before provider generation, with editable inputs and confirmed project deletion. | A provider failure must not trap a saved project in a read-only retry screen, and users need to prepare work without making a provider call. | Create projects only as a side effect of Generate; require database cleanup for abandoned projects. | The API supports update and delete, deletes cascade transactionally, and the UI distinguishes Save model from Generate draft. |
 | D-016 | Keep a persistent project chat beside the structured model editor and apply only complete, validated LLM revisions. | Users need a conversational way to evolve a built model while seeing the resulting source of truth. | Hide chat on a separate page; apply unvalidated JSON patches; keep chat ephemeral. | Chat turns and revised drafts commit atomically, recent context is bounded, and responsive layouts stack the same two surfaces on narrow screens. |
+| D-017 | Make live output and chat the top collaboration row, handle clarification as a chat workflow, place the structured editor below, and leave assumptions and warnings until the bottom review section. | The user should see the model change beside the conversation driving it, while detailed editing and residual review information follow the main task flow. | Keep a separate clarification form; lead with assumptions and warnings; retain the editor-plus-preview-rail layout. | Chat requests include the pending question, successful answers update the complete validated draft, keyboard order follows visual order, and narrow screens stack output, chat, editor, history and review in that sequence. All buttons use one typographic and sizing system. |
 
 ## Approval
 
@@ -297,3 +308,8 @@ Michal then explicitly required a chat UI beside the built model so users can as
 to update it. That direct feature decision accepts revision 5 and D-016. Persisting the
 project-scoped transcript and applying only complete validated revisions are the safety
 and continuity consequences of that interaction requirement.
+Michal then explicitly placed live output and chat together at the top, moved the
+structured editor below them, moved assumptions and warnings to the bottom, and made the
+next clarification part of chat. The same request requires a polished interface and a
+consistent button type system. That direct interaction decision accepts revision 6 and
+D-017 without changing the modelling intent or provider trust boundary.

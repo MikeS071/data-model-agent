@@ -19,15 +19,18 @@ typography guidance with the matched Data-Dense Dashboard and Minimalism & Swiss
 ## Layout
 
 - Use a compact product header for identity, pilot status and current save state.
-- At desktop widths, use three functional zones: 240px model navigation, a flexible
-  editing canvas, and a 360–420px preview/review rail.
+- At desktop widths, keep the 240px model navigation and use the flexible work area for a
+  two-column collaboration row: live model output in the main column and chat beside it.
 - Keep the current model title and version actions visible at the top of the work area.
-- Put ambiguity and clarification before model editing.
+- Treat the next clarification as a guided assistant message in chat; its answer updates
+  the same canonical model as any other conversational change.
+- Put the full-width structured editor below the live-output/chat row, followed by version
+  history, with assumptions and warnings as the final review section.
 - Collapse entity detail behind accessible summaries; show identity and field counts when
   collapsed. Relationships and rules remain separate, clearly titled editor groups.
-- Keep the representation preview near the editor instead of after the entire form.
-- Below 1180px, stack preview beneath editing. Below 760px, turn model navigation into a
-  normal flow section and use single-column form rows.
+- Below 1100px, stack live output, chat, editor, history and review in that reading order.
+  Below 760px, turn model navigation into a normal flow section and use single-column
+  form rows.
 
 ## Semantic color tokens
 
@@ -65,6 +68,9 @@ on color alone.
 
 - Controls use 8px corners; grouping panels use 12px corners. Avoid excessive pill shapes.
 - Buttons have a minimum 40px height on desktop and 44px on compact/touch layouts.
+- Every button inherits the application typeface and uses the same 14px size, 700 weight,
+  8px radius and focus treatment. Primary, secondary, text and danger variants may change
+  fill, border and emphasis, but not typography.
 - Every input has a persistent visible label. Placeholder text is supplementary only.
 - Primary actions show disabled, busy, success and error state through text and semantics.
 - Use native buttons, links, inputs, selects, details/summary and fieldsets.
