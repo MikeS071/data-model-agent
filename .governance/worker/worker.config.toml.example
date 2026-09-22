@@ -1,0 +1,14 @@
+# Copy this file to a private, ignored location and choose a provider and model.
+# The shipped example is intentionally unusable.
+model_provider = ""
+model = ""
+model_reasoning_effort = "medium"
+model_verbosity = "low"
+
+[model_providers.example]
+name = "Configure a Responses-compatible provider"
+base_url = "https://api.example.invalid/v1"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+env_key = "MODEL_API_KEY"

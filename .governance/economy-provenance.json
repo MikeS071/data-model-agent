@@ -1,0 +1,13 @@
+{
+  "sources": [
+    {
+      "source": ".governance/tooling/scripts/dev/governance-economy.mjs",
+      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceSha256": "69b183004eb266dbf735026230d91293c953fc4d3668a7f8c64dd6d6c0ed058b"
+    }
+  ],
+  "adaptations": [
+    "Explicit delivery adapter and committed project verification commands",
+    "Project-local artifact namespace and portable policy reference; preserve complete diff, full selected leaves, source freshness, actual usage and high-reasoning justification"
+  ]
+}

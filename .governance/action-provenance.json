@@ -1,0 +1,19 @@
+{
+  "sources": [
+    {
+      "source": ".governance/tooling/scripts/dev/governance-plan.mjs",
+      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceSha256": "7a30812803fb43826e4ba0faeb698f6a3d98580d3cb5f6ef2021e3f872e70746"
+    },
+    {
+      "source": ".governance/tooling/scripts/dev/governance-actions.mjs",
+      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceSha256": "bc7743c9295b6a98a737578064a2bf1c1f1e86f565ff6ebc2d251dd7e64884a3"
+    }
+  ],
+  "adaptations": [
+    "Explicit validated delivery adapter for repository, branch, optional queue, templates and mandatory policy inputs",
+    "Bind adapter digest into plans and observations; preserve authority, freshness, uncertain-write receipts and exact readback",
+    "Use project-local ignored .governance-artifacts receipts; no merge or provider provisioning"
+  ]
+}

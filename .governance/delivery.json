@@ -1,0 +1,1 @@
+{"baseBranch":"main","instructionPaths":["AGENTS.md",".governance/policy.md",".governance/quality.md",".governance/principles.md"],"project":{"branchPrefixes":["feature","fix","chore"],"repository":"YourOrg/data-model-agent","schemaVersion":1},"queue":null,"schemaVersion":1,"templates":{"issue":".governance/templates/issue.md","pr":".governance/templates/pr.md"}}

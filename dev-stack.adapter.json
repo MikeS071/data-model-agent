@@ -1,0 +1,29 @@
+{
+  "delivery": {
+    "schemaVersion": 1,
+    "project": {
+      "schemaVersion": 1,
+      "repository": "YourOrg/data-model-agent",
+      "branchPrefixes": ["feature", "fix", "chore"]
+    },
+    "baseBranch": "main",
+    "queue": null,
+    "instructionPaths": [
+      "AGENTS.md",
+      ".governance/policy.md",
+      ".governance/quality.md",
+      ".governance/principles.md"
+    ],
+    "templates": {
+      "issue": ".governance/templates/issue.md",
+      "pr": ".governance/templates/pr.md"
+    }
+  },
+  "verification": {
+    "schemaVersion": 1,
+    "commands": {
+      "syntax": ["node", "--check", "src/index.mjs"],
+      "unit": ["node", "--test", "test/model.test.mjs"]
+    }
+  }
+}

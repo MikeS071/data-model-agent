@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "agents": {
+    "enabled": false,
+    "maxDevelopmentSubagents": 2
+  },
+  "review": {
+    "reasoning": "medium",
+    "verbosity": "low"
+  }
+}

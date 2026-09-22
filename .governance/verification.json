@@ -1,0 +1,1 @@
+{"commands":{"syntax":["node","--check","src/index.mjs"],"unit":["node","--test","test/model.test.mjs"]},"schemaVersion":1}

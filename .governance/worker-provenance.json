@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "origin": {
+    "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+    "blobs": [
+      { "name": "admission.py", "sourceSha256": "9d956d54b726c84726ecdae4276ea54207aebabbeafcee7f69f58dedad848235" },
+      { "name": "runtime_observation.py", "sourceSha256": "8d44da5ce1e9b26324fabdf363bba1c5d829deea03e253de70295cb1f5ab6a10" },
+      { "name": "test_admission.py", "sourceSha256": "64fdfcf921182a8517100f4124c68040eecb772bbc398d0e94a9431efd510e24" },
+      { "name": "test_runtime.py", "sourceSha256": "ebb678f6056a7812ab27efba12a7d816e5e437cbe3aa858669916b427460e791" },
+      { "name": "dispatch.py", "sourceSha256": "db543a2a23cb11c7c977560ff5729f481a0f0d1f712a4c837c43e9b6cd900446" },
+      { "name": "contract.mjs", "sourceSha256": "eece69de450ecc0eec8a739844a0a3058afbb8422e57d5ebf45b6ff8b94530df" },
+      { "name": "worker.py", "sourceSha256": "1dfe827dab9a0270053809248a01441002cf980e8660f3184ba4e4c3c82f2bc5" },
+      { "name": "test_worker.py", "sourceSha256": "add601a22a1fad64641f099533276bf4461b8bff547687fcb1e352395a1c8222" }
+    ]
+  },
+  "adaptations": [
+    "Rebind runtime imports and roots to the canonical .governance/worker directory",
+    "Bind repository identity, source, capacity and authority at dispatch and admission refresh",
+    "Preserve native ownership, isolated source, bounded attempts, patch-only results and independent review",
+    "Require one explicit user-supplied provider/model configuration with no bundled default or fallback"
+  ]
+}

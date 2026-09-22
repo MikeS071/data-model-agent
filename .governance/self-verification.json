@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "maxIterations": 5,
+  "maxSameFailure": 2,
+  "maxElapsedMinutes": 240
+}

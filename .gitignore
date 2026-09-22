@@ -1,0 +1,8 @@
+
+# dev-stack:begin
+/.governance-artifacts/
+/.codex/delegations/
+/.codex/worker-worktrees/
+/.governance/.proof/
+/.governance/**/__pycache__/
+# dev-stack:end
