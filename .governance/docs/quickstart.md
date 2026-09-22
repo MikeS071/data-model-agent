@@ -30,11 +30,14 @@ add stronger external pinning without changing this workflow.
 ## Start in an empty directory with Codex
 
 Open Codex in the directory you want to initialise and paste the
-[project initialisation prompt](initialise-prompt.md). It tells Codex where the reviewed
-dev-stack release lives, asks one critical unanswered question at a time, and produces a
-readable foundation/install plan before writing. The selectable
-`$dev-stack-project-initialisation` skill provides the same workflow when Codex can
-discover the release's native skills.
+[empty-project initialisation prompt](initialise-prompt.md). It assumes the directory is
+empty, asks for the project name and GitHub owner one question at a time, clones dev-stack
+from its GitHub repository into a temporary installation directory, and performs steps
+1–3 below with a generated adapter. After the verified install and local governance
+commit it immediately starts the guided request intake. The selectable
+`$dev-stack-project-initialisation` skill exposes the same workflow when Codex can already
+discover the release's native skills. No release path, digest, hash or hand-written
+adapter is required from the user.
 
 Project initialisation establishes the repository and governance foundation; it does not
 silently authorize the first application feature. That feature still passes the separate

@@ -7,28 +7,29 @@ description: Create or initialise a new project with dev-stack, or inspect, inst
 
 ## New or empty project
 
-Start by inspecting the selected directory, Git state, existing instructions and files;
-an empty directory is not permission to invent repository identity or overwrite nearby
-work. Ask one critical unanswered question at a time. Stop when the following technical
-foundation is reviewable, skipping facts the user already supplied:
+Start by confirming the selected directory is empty. Ask for the user-defined project
+name, GitHub owner or organisation, and whether that project repository already exists,
+one question at a time. Do not invent a GitHub owner or create a remote repository. Show
+a readable bootstrap plan before writes. After approval, initialise `main`, add the
+confirmed origin only when it exists, and create a secret-free adapter for the resulting
+`owner/project-name`; verification commands may be empty until design selects the stack.
 
-1. project name, purpose, users and first observable outcome;
-2. local-only or hosted repository identity, base branch and allowed work prefixes;
-3. application shape, language/runtime, framework and package manager;
-4. verification commands or the honest plan for adding them;
-5. storage, external services, sensitive-data and deployment boundaries; and
-6. whether the feature includes visual/interactive UI work.
+Obtain the installation source by cloning
+`https://github.com/EtnaJamesCapital/dev-stack.git` into a temporary directory outside
+the project. Read that checkout's root instructions, this skill and quickstart. Run its
+installer `doctor`, `plan`, present the readable release version/paths/actions, then
+`apply` and `verify` when the reviewed plan matches the approved bootstrap. Do not ask the
+human for release paths, digests, hashes or commit identifiers, and do not hand-copy the
+source tree. Remove only the temporary clone created by this workflow after verification.
+Network access to clone the named public source is within this bootstrap request; remote
+repository creation, pushes and other external writes still require separate authority.
 
-Summarize the answers, assumptions, unresolved decisions, intended files and commands in
-a readable plan before writing. A human does not provide release digests or Git commit
-identifiers. Do not invent a GitHub owner, remote, provider, credential or deployment
-target. Initialise Git, create application scaffolding, install dependencies or configure
-external services only when those actions are in the user's authorized scope. Existing
-files and stronger policy remain authoritative.
-
-The governance installation and the application feature are distinct. Install the
-reviewed dev-stack release using the lifecycle below, then use the two request/design
-gates for application scaffolding or feature implementation. If the accepted work has a
+The governance installation and the application feature are distinct. Commit the local
+governance baseline, create `feature/<project-name>`, then immediately run
+[session initialisation](../session-initialisation/SKILL.md) for the first feature. Ask
+one critical unanswered request question at a time and pass the human request gate;
+afterward ask the technical-foundation questions and pass the separate design gate before
+implementation. If the accepted work has a
 visual or interactive interface, select `$ui-ux-pro-max` during design and UI work. Never
 select that skill for backend, API, data-model, database, infrastructure or other
 non-visual work.

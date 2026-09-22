@@ -26,12 +26,12 @@
     },
     {
       "path": ".agents/skills/dev-stack-project-initialisation/SKILL.md",
-      "sha256": "624c0295fca79ac81e573b5bce4de81c18a862097f9357626a0834caae8facd8",
+      "sha256": "9bc9aa957f7485a147c9ca4d0e5f25430b02863db22e0118b0952b82863aff4f",
       "mode": 420
     },
     {
       "path": ".agents/skills/dev-stack-project-initialisation/agents/openai.yaml",
-      "sha256": "eb0a470afaa2aad8fec72298b184295b553061b49e8ade179be0460c069e1a32",
+      "sha256": "70b61c9b79ba9a3600c48c67c60536c372715bec2dfebdd167542925c93df12c",
       "mode": 420
     },
     {
@@ -166,12 +166,12 @@
     },
     {
       "path": ".governance/docs/changelog.md",
-      "sha256": "46a7a7df659761180e4555c1c1902b826ba788df1b1cbbea9cf656ef773d84da",
+      "sha256": "b7ae5e75ff67f62c6d3a3f3e59d19bf7008df57f0a99a835ec6e05267a0ceb1f",
       "mode": 420
     },
     {
       "path": ".governance/docs/initialise-prompt.md",
-      "sha256": "362ad1e248daa19e147b456b12c7e79a87cc222cadbd6afb31549703069ed86f",
+      "sha256": "205e5da3ffbac9654e5fdab819468a96ceb11e8f2c7390d582717915efce4bef",
       "mode": 420
     },
     {
@@ -181,7 +181,7 @@
     },
     {
       "path": ".governance/docs/quickstart.md",
-      "sha256": "5f375ac47afb48f9080f08044bb9576889aa08a51f73586b608e43e7d430d3aa",
+      "sha256": "ae266067a086ac2bf3c469244c7aba9b8e6774777a80c7a20fe6db3334116e51",
       "mode": 420
     },
     {
@@ -196,7 +196,7 @@
     },
     {
       "path": ".governance/docs/reference.md",
-      "sha256": "2c9f9a355beb8bee72e223b0a5768ca7eeb56c3a4b6c919393d0ef740b3cd7d0",
+      "sha256": "20f5960a1da3f076e5c9e5503d7548cdceb708535580883da39a391fab10159e",
       "mode": 420
     },
     {
@@ -381,7 +381,7 @@
     },
     {
       "path": ".governance/skills/project-initialisation/SKILL.md",
-      "sha256": "12b500d5e29fa78b116c5130d581ad152695d154998a8840f9e8ce04e4694c97",
+      "sha256": "c7f8faf78737e1b10977386dc24b05a75c06b53363db86c5a1f894578d6595a3",
       "mode": 420
     },
     {
@@ -721,7 +721,7 @@
     },
     {
       "path": ".governance/tests/ui_skill.test.mjs",
-      "sha256": "21ed7f19f0f57b2ab552db0f4985998be1e3a09831d6c460476a82a7669522fa",
+      "sha256": "f43e5e0641df764e55bca384324cad442265f5e39aa8a0d4a414e2489e7a8615",
       "mode": 420
     },
     {

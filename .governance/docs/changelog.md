@@ -23,7 +23,9 @@ digests, and `scope create` captures the current branch/commit from accepted pro
 Configured verification now runs against the current clean descendant candidate while
 keeping the accepted scope source frozen as the pre-implementation baseline.
 Adds a copyable Codex new-project prompt plus selectable project-initialisation metadata
-for one-critical-question-at-a-time foundation intake. Adds an attributed, pinned local
+that bootstraps an empty directory from the dev-stack GitHub repository using a
+user-defined project name, then starts one-critical-question-at-a-time feature intake.
+Adds an attributed, pinned local
 copy of UI/UX Pro Max 2.13.0 with Codex selection metadata and UI-only routing; backend,
 API, database, infrastructure and other non-visual work are explicitly excluded.
 

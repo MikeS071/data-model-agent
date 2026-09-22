@@ -5,7 +5,10 @@ entrypoints. Root AGENTS/.gitignore receive marked managed sections; their other
 remain project-owned. No application files, package.json, CI, user settings or hooks
 are overwritten by the installer. Unknown files are not installer-owned.
 
-`docs/initialise-prompt.md` is the copyable Codex entrypoint for a new or empty project.
+`docs/initialise-prompt.md` is the copyable Codex entrypoint for an empty project. It
+collects a user-defined project name and GitHub owner, clones the named dev-stack GitHub
+repository into a temporary installation directory, generates the adapter, runs the
+installer lifecycle and then starts guided feature intake.
 The native `dev-stack-project-initialisation` metadata exposes the same workflow as a
 selectable skill. The `ui-ux-pro-max` router is selectable and may be discovered
 implicitly only for visual or interactive UI/UX work; its description expressly excludes
