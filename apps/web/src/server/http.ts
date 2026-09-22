@@ -5,16 +5,17 @@ const publicErrors = new Set([
   'project-input-invalid', 'requirements-missing', 'sources-invalid', 'source-invalid', 'source-kind-unsupported',
   'source-binary', 'source-too-large', 'sources-too-large', 'project-missing', 'version-missing', 'draft-missing',
   'provider-not-configured', 'provider-timeout', 'provider-unavailable', 'provider-rate-limited', 'provider-failed',
-  'provider-output-missing', 'provider-output-invalid', 'generation-result-invalid', 'entities-invalid',
+  'provider-config-invalid', 'provider-output-missing', 'provider-output-invalid', 'provider-output-incomplete',
+  'generation-result-invalid', 'revision-result-invalid', 'revision-message-invalid', 'chat-message-invalid', 'entities-invalid',
 ]);
-const clientErrors = new Set(['project-input-invalid', 'requirements-missing', 'sources-invalid', 'source-invalid', 'source-kind-unsupported', 'source-binary', 'source-too-large', 'sources-too-large']);
+const clientErrors = new Set(['project-input-invalid', 'requirements-missing', 'sources-invalid', 'source-invalid', 'source-kind-unsupported', 'source-binary', 'source-too-large', 'sources-too-large', 'chat-message-invalid']);
 
 const errorResponse = (error: unknown) => {
   const candidate = error instanceof Error ? error.message : '';
   const code = publicErrors.has(candidate) ? candidate : 'request-failed';
   const status = clientErrors.has(code) ? 400 : code === 'project-missing' || code === 'version-missing' ? 404
-    : code === 'provider-rate-limited' ? 429 : code === 'provider-not-configured' ? 503
-      : code.startsWith('provider-') || code.startsWith('generation-') || code === 'entities-invalid' ? 502 : 500;
+    : code === 'provider-rate-limited' ? 429 : code === 'provider-not-configured' || code === 'provider-config-invalid' ? 503
+      : code.startsWith('provider-') || code.startsWith('generation-') || code.startsWith('revision-') || code === 'entities-invalid' ? 502 : 500;
   return Response.json({ error: code }, { status });
 };
 
@@ -45,10 +46,34 @@ export function getProject(projectId: string, service: ModelService) {
   } catch (error) { return errorResponse(error); }
 }
 
+export async function updateProject(projectId: string, request: Request, service: ModelService) {
+  try {
+    const input = await json(request);
+    return Response.json(service.updateProject(projectId, {
+      title: input.title as string, requirements: input.requirements as string, sources: input.sources as SourceArtifactInput[],
+    }));
+  } catch (error) { return errorResponse(error); }
+}
+
+export function deleteProject(projectId: string, service: ModelService) {
+  try {
+    return service.deleteProject(projectId)
+      ? new Response(null, { status: 204 })
+      : Response.json({ error: 'project-missing' }, { status: 404 });
+  } catch (error) { return errorResponse(error); }
+}
+
 export async function generateDraft(projectId: string, request: Request, service: ModelService) {
   try {
     const input = await json(request);
     return Response.json(await service.regenerate(projectId, typeof input.clarification === 'string' ? input.clarification : null));
+  } catch (error) { return errorResponse(error); }
+}
+
+export async function chatWithModel(projectId: string, request: Request, service: ModelService) {
+  try {
+    const input = await json(request);
+    return Response.json(await service.reviseFromChat(projectId, typeof input.message === 'string' ? input.message : ''));
   } catch (error) { return errorResponse(error); }
 }
 

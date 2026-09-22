@@ -64,6 +64,10 @@ export interface GenerationResult {
   clarificationQuestions: string[];
 }
 
+export interface RevisionResult extends GenerationResult {
+  assistantMessage: string;
+}
+
 const cardinalities = new Set<Cardinality>(['one', 'zero-or-one', 'one-or-many', 'zero-or-many']);
 const keys = new Set<AttributeKey>(['PK', 'FK', 'NONE']);
 const record = (value: unknown, code: string): Record<string, unknown> => {
@@ -168,4 +172,9 @@ export function parseGenerationResult(value: unknown): GenerationResult {
     warnings: textList(result.warnings, 'generation-warnings-invalid'),
     clarificationQuestions: textList(result.clarificationQuestions, 'generation-questions-invalid'),
   };
+}
+
+export function parseRevisionResult(value: unknown): RevisionResult {
+  const result = record(value, 'revision-result-invalid');
+  return { ...parseGenerationResult(result), assistantMessage: text(result.assistantMessage, 'revision-message-invalid') };
 }

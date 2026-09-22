@@ -17,6 +17,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     }],
     draft: null as typeof generatedClaimPayment | null,
     versions: [] as Array<{ id: string; versionNumber: number; createdAt: string }>,
+    messages: [] as Array<{ id: string; role: 'user' | 'assistant'; content: string; createdAt: string }>,
   };
 
   await page.route('**/api/projects**', async route => {
@@ -43,6 +44,11 @@ test('Michal can generate, refine, preview and version a claim payment model', a
       created = true;
       return json(project, 201);
     }
+    if (path === `/api/projects/${project.id}` && method === 'PUT') {
+      const input = request.postDataJSON() as { title: string; requirements: string };
+      Object.assign(project, { title: input.title, requirements: input.requirements });
+      return json(project);
+    }
     if (path.endsWith('/generate') && method === 'POST') {
       generationCount += 1;
       clarificationSent = (request.postDataJSON() as { clarification: string | null }).clarification ?? '';
@@ -54,6 +60,18 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     if (path.endsWith('/draft') && method === 'PUT') {
       project.draft = request.postDataJSON() as typeof generatedClaimPayment;
       return json(project.draft);
+    }
+    if (path.endsWith('/chat') && method === 'POST') {
+      const message = (request.postDataJSON() as { message: string }).message;
+      project.draft = {
+        ...structuredClone(generatedClaimPayment),
+        model: { ...structuredClone(generatedClaimPayment.model), businessDefinition: 'Tracks claims, payments and recovery transactions.' },
+      };
+      project.messages = [
+        { id: 'message-1', role: 'user', content: message, createdAt: '2026-09-22T00:02:00Z' },
+        { id: 'message-2', role: 'assistant', content: 'I added recovery transactions and updated the model definition.', createdAt: '2026-09-22T00:02:01Z' },
+      ];
+      return json(project);
     }
     if (path.endsWith('/versions') && method === 'POST') {
       project.versions = [{ id: 'version-1', versionNumber: 1, createdAt: '2026-09-22T00:01:00Z' }];
@@ -86,6 +104,9 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     name: 'claims.ddl', mimeType: 'text/plain', buffer: Buffer.from('CREATE TABLE claim(id UUID PRIMARY KEY);'),
   });
   await expect(page.getByText('claims.ddl')).toBeVisible();
+  await page.getByRole('button', { name: 'Save model' }).click();
+  await expect(page.getByText('Model saved')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Delete model' })).toBeVisible();
   await page.getByRole('button', { name: /Generate draft/u }).click();
 
   await expect(page.getByRole('heading', { name: 'Claim Payment model' })).toBeVisible();
@@ -113,6 +134,14 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await expect(page.getByRole('img', { name: 'draw.io model preview' })).toBeVisible();
   await page.getByText(/Canonical JSON/u).click();
   await expect(page.locator('pre').filter({ hasText: 'Insurance Claim' })).toBeVisible();
+
+  const editorBox = await page.locator('.editor-card').boundingBox();
+  const chatBox = await page.getByRole('region', { name: 'Model chat' }).boundingBox();
+  expect(editorBox && chatBox && editorBox.x + editorBox.width <= chatBox.x + 1).toBeTruthy();
+  await page.getByLabel('Message the model assistant').fill('Add recovery transactions.');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('I added recovery transactions and updated the model definition.')).toBeVisible();
+  await expect(page.getByLabel('Canonical model business definition')).toHaveValue('Tracks claims, payments and recovery transactions.');
 
   await page.getByRole('button', { name: 'Save version' }).click();
   await expect(page.getByText('Version 1')).toBeVisible();

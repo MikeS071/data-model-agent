@@ -16,6 +16,14 @@ export interface ProjectRecord {
   sources: SourceArtifact[];
   draft: GenerationResult | null;
   versions: VersionSummary[];
+  messages: ChatMessage[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
 }
 
 export interface ProjectSummary {
@@ -42,6 +50,7 @@ export interface ModelVersion extends VersionSummary, GenerationResult {
 interface ProjectRow { id: string; title: string; requirements: string; created_at: string; updated_at: string }
 interface SourceRow { id: string; name: string; kind: SourceArtifact['kind']; content: string; ordinal: number }
 interface DraftRow { model_json: string; assumptions_json: string; warnings_json: string; questions_json: string }
+interface MessageRow { id: string; role: ChatMessage['role']; content: string; created_at: string }
 interface VersionRow extends DraftRow { id: string; project_id: string; version_number: number; sources_json: string; mermaid: string; drawio: string; created_at: string }
 
 const now = () => new Date().toISOString();
@@ -77,6 +86,11 @@ export class SqliteModelRepository {
         model_json TEXT NOT NULL, assumptions_json TEXT NOT NULL, warnings_json TEXT NOT NULL,
         questions_json TEXT NOT NULL, updated_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS model_messages (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL,
+        ordinal INTEGER NOT NULL, created_at TEXT NOT NULL, UNIQUE(project_id, ordinal)
+      );
       CREATE TABLE IF NOT EXISTS model_versions (
         id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         version_number INTEGER NOT NULL, model_json TEXT NOT NULL, assumptions_json TEXT NOT NULL,
@@ -85,6 +99,7 @@ export class SqliteModelRepository {
         UNIQUE(project_id, version_number)
       );
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
+      INSERT OR IGNORE INTO schema_migrations(version) VALUES (2);
     `);
   }
 
@@ -102,6 +117,26 @@ export class SqliteModelRepository {
     return this.getProject(id)!;
   }
 
+  updateProject(id: string, input: { title: string; requirements: string; sources: SourceArtifactInput[] }): ProjectRecord {
+    const title = input.title.trim(), requirements = input.requirements.trim(), timestamp = now();
+    if (!title || !requirements) throw new Error('project-input-invalid');
+    this.#database.exec('BEGIN IMMEDIATE');
+    try {
+      const result = this.#database.prepare('UPDATE projects SET title=?,requirements=?,updated_at=? WHERE id=?')
+        .run(title, requirements, timestamp, id);
+      if (result.changes !== 1) throw new Error('project-missing');
+      this.#database.prepare('DELETE FROM source_artifacts WHERE project_id=?').run(id);
+      const insert = this.#database.prepare('INSERT INTO source_artifacts(id,project_id,name,kind,content,ordinal) VALUES (?,?,?,?,?,?)');
+      input.sources.forEach((source, ordinal) => insert.run(randomUUID(), id, source.name, source.kind, source.content, ordinal));
+      this.#database.exec('COMMIT');
+    } catch (error) { this.#database.exec('ROLLBACK'); throw error; }
+    return this.getProject(id)!;
+  }
+
+  deleteProject(id: string): boolean {
+    return this.#database.prepare('DELETE FROM projects WHERE id=?').run(id).changes === 1;
+  }
+
   saveWorkingDraft(projectId: string, draft: GenerationResult): GenerationResult {
     const value = parseGenerationResult(draft), timestamp = now();
     const result = this.#database.prepare(`INSERT INTO working_drafts(project_id,model_json,assumptions_json,warnings_json,questions_json,updated_at)
@@ -111,6 +146,26 @@ export class SqliteModelRepository {
     if (result.changes !== 1) throw new Error('project-missing');
     this.#database.prepare('UPDATE projects SET updated_at=? WHERE id=?').run(timestamp, projectId);
     return value;
+  }
+
+  saveChatTurn(projectId: string, userMessage: string, assistantMessage: string, draft: GenerationResult): ProjectRecord {
+    const value = parseGenerationResult(draft), user = userMessage.trim(), assistant = assistantMessage.trim(), timestamp = now();
+    if (!user || !assistant) throw new Error('chat-message-invalid');
+    this.#database.exec('BEGIN IMMEDIATE');
+    try {
+      if (!this.#database.prepare('SELECT 1 AS value FROM projects WHERE id=?').get(projectId)) throw new Error('project-missing');
+      const ordinal = (this.#database.prepare('SELECT COALESCE(MAX(ordinal),-1)+1 AS value FROM model_messages WHERE project_id=?').get(projectId) as { value: number }).value;
+      const insertMessage = this.#database.prepare('INSERT INTO model_messages(id,project_id,role,content,ordinal,created_at) VALUES (?,?,?,?,?,?)');
+      insertMessage.run(randomUUID(), projectId, 'user', user, ordinal, timestamp);
+      insertMessage.run(randomUUID(), projectId, 'assistant', assistant, ordinal + 1, timestamp);
+      this.#database.prepare(`INSERT INTO working_drafts(project_id,model_json,assumptions_json,warnings_json,questions_json,updated_at)
+        VALUES (?,?,?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET model_json=excluded.model_json, assumptions_json=excluded.assumptions_json,
+        warnings_json=excluded.warnings_json, questions_json=excluded.questions_json, updated_at=excluded.updated_at`)
+        .run(projectId, JSON.stringify(value.model), JSON.stringify(value.assumptions), JSON.stringify(value.warnings), JSON.stringify(value.clarificationQuestions), timestamp);
+      this.#database.prepare('UPDATE projects SET updated_at=? WHERE id=?').run(timestamp, projectId);
+      this.#database.exec('COMMIT');
+    } catch (error) { this.#database.exec('ROLLBACK'); throw error; }
+    return this.getProject(projectId)!;
   }
 
   saveVersion(projectId: string): ModelVersion {
@@ -143,7 +198,9 @@ export class SqliteModelRepository {
     const draftRow = this.#database.prepare('SELECT model_json,assumptions_json,warnings_json,questions_json FROM working_drafts WHERE project_id=?').get(id) as DraftRow | undefined;
     const versions = (this.#database.prepare('SELECT id,version_number,created_at FROM model_versions WHERE project_id=? ORDER BY version_number DESC').all(id) as unknown as Array<{ id: string; version_number: number; created_at: string }>)
       .map(version => ({ id: version.id, versionNumber: version.version_number, createdAt: version.created_at }));
-    return { id: row.id, title: row.title, requirements: row.requirements, createdAt: row.created_at, updatedAt: row.updated_at, sources, draft: draftRow ? decodeGeneration(draftRow) : null, versions };
+    const messages = (this.#database.prepare('SELECT id,role,content,created_at FROM model_messages WHERE project_id=? ORDER BY ordinal').all(id) as unknown as MessageRow[])
+      .map(message => ({ id: message.id, role: message.role, content: message.content, createdAt: message.created_at }));
+    return { id: row.id, title: row.title, requirements: row.requirements, createdAt: row.created_at, updatedAt: row.updated_at, sources, draft: draftRow ? decodeGeneration(draftRow) : null, versions, messages };
   }
 
   getVersion(projectId: string, versionNumber: number): ModelVersion | null {

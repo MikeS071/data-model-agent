@@ -5,9 +5,10 @@ import type { CanonicalModel, GenerationResult, SourceArtifact, SourceArtifactIn
 
 interface VersionSummary { id: string; versionNumber: number; createdAt: string }
 interface ProjectSummary { id: string; title: string; updatedAt: string; versionCount: number; hasDraft: boolean }
+interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; createdAt: string }
 interface Project {
   id: string; title: string; requirements: string; createdAt: string; updatedAt: string;
-  sources: SourceArtifact[]; draft: GenerationResult | null; versions: VersionSummary[];
+  sources: SourceArtifact[]; draft: GenerationResult | null; versions: VersionSummary[]; messages: ChatMessage[];
 }
 
 const emptyDraft = { title: '', requirements: '', sources: [] as SourceArtifactInput[] };
@@ -16,14 +17,27 @@ const sourceKind = (name: string): SourceKind | null => {
   return extension === 'md' ? 'markdown' : extension === 'sql' ? 'sql' : extension === 'ddl' ? 'ddl'
     : extension === 'json' ? 'json' : extension === 'txt' ? 'text' : null;
 };
-const message = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.';
+const errorMessages: Record<string, string> = {
+  'provider-timeout': 'OpenAI did not finish within the configured time. Your model is saved; retry or increase OPENAI_TIMEOUT_MS.',
+  'provider-output-incomplete': 'OpenAI reached the configured output limit before completing the model. Increase OPENAI_MAX_OUTPUT_TOKENS and retry.',
+  'provider-rate-limited': 'OpenAI is rate limiting requests. Your model is saved; wait briefly and retry.',
+  'provider-not-configured': 'OpenAI is not configured. Add the server-side API key and model settings, then restart the server.',
+  'provider-config-invalid': 'An OpenAI runtime setting is invalid. Check the server environment and restart the server.',
+};
+const message = (error: unknown) => error instanceof Error ? errorMessages[error.message] ?? error.message : 'Something went wrong.';
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? 'request-failed');
+  const body = response.status === 204 ? null : await response.json();
+  if (!response.ok) throw new Error(body?.error ?? 'request-failed');
   return body as T;
 }
+
+const projectIntake = (project: Project) => ({
+  title: project.title,
+  requirements: project.requirements,
+  sources: project.sources.map(({ name, kind, content }) => ({ name, kind, content })),
+});
 
 function MermaidPreview({ source }: { source: string }) {
   const [svg, setSvg] = useState('');
@@ -80,6 +94,7 @@ export function ModelWorkbench() {
   const [project, setProject] = useState<Project | null>(null);
   const [intake, setIntake] = useState(emptyDraft);
   const [clarification, setClarification] = useState('');
+  const [chatMessage, setChatMessage] = useState('');
   const [status, setStatus] = useState('Ready');
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -133,7 +148,10 @@ export function ModelWorkbench() {
 
   const loadProject = async (id: string) => {
     setError(''); setStatus('Loading…');
-    try { setProject(await requestJson<Project>(`/api/projects/${id}`)); setStatus('Ready'); }
+    try {
+      const loaded = await requestJson<Project>(`/api/projects/${id}`);
+      setProject(loaded); setIntake(projectIntake(loaded)); setStatus('Ready');
+    }
     catch (error) { setError(message(error)); setStatus('Load failed'); }
   };
 
@@ -146,17 +164,36 @@ export function ModelWorkbench() {
         if (!kind) throw new Error(`Unsupported file: ${file.name}`);
         return { name: file.name, kind, content: await file.text() };
       }));
-      setIntake(current => ({ ...current, sources }));
+      setIntake(current => ({ ...current, sources: [...current.sources, ...sources] }));
     } catch (error) { setError(message(error)); }
+  };
+
+  const persistIntake = async () => {
+    const target = project
+      ? await requestJson<Project>(`/api/projects/${project.id}`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(intake),
+      })
+      : await requestJson<Project>('/api/projects', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(intake),
+      });
+    setProject(target); setIntake(projectIntake(target));
+    return target;
+  };
+
+  const saveIntake = async () => {
+    setError(''); setStatus(project ? 'Saving changes…' : 'Saving model…');
+    try {
+      await persistIntake();
+      setStatus(project ? 'Changes saved' : 'Model saved');
+      await refreshProjects();
+    } catch (error) { setError(message(error)); setStatus('Save failed'); }
   };
 
   const generate = async () => {
     setError(''); setStatus('Preparing draft…');
     try {
       let target = project;
-      if (!target) target = await requestJson<Project>('/api/projects', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(intake),
-      });
+      if (!target?.draft) target = await persistIntake();
       setStatus('Generating with OpenAI…');
       target = await requestJson<Project>(`/api/projects/${target.id}/generate`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clarification: clarification || null }),
@@ -164,6 +201,18 @@ export function ModelWorkbench() {
       setProject(target); setClarification(''); setDirty(false); setStatus('Draft ready');
       await refreshProjects();
     } catch (error) { setError(message(error)); setStatus('Generation stopped'); await refreshProjects().catch(() => undefined); }
+  };
+
+  const removeProject = async () => {
+    if (!project) return;
+    const versionWarning = project.versions.length ? ` and its ${project.versions.length} saved version${project.versions.length === 1 ? '' : 's'}` : '';
+    if (!window.confirm(`Delete “${project.title}”${versionWarning}? This cannot be undone.`)) return;
+    setError(''); setStatus('Deleting model…');
+    try {
+      await requestJson<void>(`/api/projects/${project.id}`, { method: 'DELETE' });
+      setProject(null); setIntake(emptyDraft); setDirty(false); setStatus('Model deleted');
+      await refreshProjects();
+    } catch (error) { setError(message(error)); setStatus('Delete failed'); }
   };
 
   const updateModel = (change: (model: CanonicalModel) => void) => {
@@ -197,6 +246,24 @@ export function ModelWorkbench() {
     } catch (error) { setError(message(error)); }
   };
 
+  const sendChatMessage = async () => {
+    if (!project?.draft || !chatMessage.trim()) return;
+    setError(''); setStatus('Updating model with assistant…');
+    try {
+      if (dirty) {
+        await requestJson(`/api/projects/${project.id}/draft`, {
+          method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(project.draft),
+        });
+        setDirty(false);
+      }
+      const updated = await requestJson<Project>(`/api/projects/${project.id}/chat`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: chatMessage }),
+      });
+      setProject(updated); setChatMessage(''); setDirty(false); setStatus('Model updated from chat');
+      await refreshProjects();
+    } catch (error) { setError(message(error)); setStatus('Chat update stopped'); }
+  };
+
   const latest = project?.versions[0]?.versionNumber ?? null;
   const downloadStem = project?.title.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/(^-|-$)/gu, '') || 'model';
   const foreignKeyTargets = project?.draft?.model.entities.flatMap(entity => entity.attributes
@@ -218,7 +285,7 @@ export function ModelWorkbench() {
 
     <div className="workspace">
       <aside className="sidebar panel" aria-label="Saved models">
-        <div className="sidebar-heading"><div><span className="eyebrow">Workspace</span><h2>Models</h2></div><button className="secondary-button compact-button" onClick={() => { setProject(null); setIntake(emptyDraft); setError(''); }}>New model</button></div>
+        <div className="sidebar-heading"><div><span className="eyebrow">Workspace</span><h2>Models</h2></div><button className="secondary-button compact-button" onClick={() => { setProject(null); setIntake(emptyDraft); setError(''); setStatus('Ready'); }}>New model</button></div>
         <div className="project-list">{projects.length ? projects.map(item => <button className={`project-item ${project?.id === item.id ? 'active' : ''}`} aria-pressed={project?.id === item.id} key={item.id} onClick={() => void loadProject(item.id)}>
           <strong>{item.title}</strong><span>{item.versionCount} version{item.versionCount === 1 ? '' : 's'} · {item.hasDraft ? 'working draft' : 'empty'}</span>
         </button>) : <div className="empty-state"><Icon name="database" /><p>No saved models yet</p><span>Create your first model from requirements or source files.</span></div>}</div>
@@ -227,18 +294,23 @@ export function ModelWorkbench() {
 
       <section className="main-column" id="work-area" tabIndex={-1}>
         {error && <div className="error-banner" role="alert"><strong>Action stopped</strong><span>{error}</span></div>}
-        {!project ? <section className="panel intake-card">
-          <div className="section-heading"><div><span className="eyebrow">New model</span><h2>Start with what you know</h2><p>Incomplete requirements are expected. The draft keeps assumptions and questions visible.</p></div><span className="status-dot" aria-live="polite">{status}</span></div>
+        {!project || !project.draft ? <section className="panel intake-card">
+          <div className="section-heading"><div><span className="eyebrow">{project ? 'Model setup' : 'New model'}</span><h2>{project ? 'Refine the intake before generation' : 'Start with what you know'}</h2><p>Incomplete requirements are expected. Save the model without contacting OpenAI, then generate when it is ready.</p></div><span className="status-dot" aria-live="polite">{status}</span></div>
           <label>Model name<input aria-label="Model name" value={intake.title} onChange={event => setIntake({ ...intake, title: event.target.value })} placeholder="e.g. Claim Payment" /></label>
           <label>Requirements<textarea aria-label="Requirements" value={intake.requirements} onChange={event => setIntake({ ...intake, requirements: event.target.value })} placeholder="Describe the entities, relationships, rules and questions…" rows={8} /></label>
           <label className="file-drop"><span className="file-drop-title"><Icon name="plus" />Add source files</span><input aria-label="Source files" type="file" multiple accept=".md,.txt,.sql,.ddl,.json" onChange={event => void filesSelected(event.target.files)} />
             <span>Markdown, text, SQL, DDL or JSON · treated as inert text</span></label>
-          {intake.sources.length > 0 && <ul className="source-list">{intake.sources.map(source => <li key={source.name}>{source.name}<span>{source.kind}</span></li>)}</ul>}
-          <div className="intake-actions"><button className="primary-button" disabled={busy || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void generate()}>Generate draft <Icon name="arrow" /></button><span>Creates a working draft, not a saved version.</span></div>
-        </section> : project.draft ? <>
+          {intake.sources.length > 0 && <ul className="source-list">{intake.sources.map((source, index) => <li key={`${source.name}-${index}`}><span className="source-name">{source.name}<small>{source.kind}</small></span><button className="icon-button destructive" aria-label={`Remove source ${source.name}`} onClick={() => setIntake(current => ({ ...current, sources: current.sources.filter((_, candidate) => candidate !== index) }))}><Icon name="trash" /></button></li>)}</ul>}
+          <div className="intake-actions">
+            <button className="secondary-button" disabled={busy || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void saveIntake()}>{project ? 'Save changes' : 'Save model'}</button>
+            <button className="primary-button" disabled={busy || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void generate()}>Generate draft <Icon name="arrow" /></button>
+            {project && <button className="danger-button" disabled={busy} onClick={() => void removeProject()}>Delete model</button>}
+            <span>Save makes no provider call. Generate sends the current intake to OpenAI.</span>
+          </div>
+        </section> : <>
           <section className="panel model-header">
             <div><span className="eyebrow">Working draft</span><h1>{project.draft.model.name} model</h1><p>{project.draft.model.businessDefinition}</p></div>
-            <div className="header-actions"><span className="status-dot" aria-live="polite">{status}</span><button className="secondary-button" disabled={busy} onClick={() => void generate()}>Regenerate</button><button className="primary-button" disabled={busy} onClick={() => void saveVersion()}>Save version</button></div>
+            <div className="header-actions"><span className="status-dot" aria-live="polite">{status}</span><button className="secondary-button" disabled={busy} onClick={() => void generate()}>Regenerate</button><button className="primary-button" disabled={busy} onClick={() => void saveVersion()}>Save version</button><button className="danger-button" disabled={busy} onClick={() => void removeProject()}>Delete model</button></div>
           </section>
 
           {(project.draft.assumptions.length > 0 || project.draft.warnings.length > 0 || project.draft.clarificationQuestions.length > 0) && <section className="review-grid">
@@ -336,6 +408,15 @@ export function ModelWorkbench() {
           </section>
 
           <div className="preview-rail">
+            <section className="panel assistant-card" role="region" aria-label="Model chat">
+              <div className="section-heading"><div><span className="eyebrow">Model assistant</span><h2>Change the model by conversation</h2><p>Ask for a change and review the updated structured model beside this chat.</p></div></div>
+              <ol className="chat-transcript" aria-live="polite">
+                {project.messages.length ? project.messages.map(item => <li className={`chat-message ${item.role}`} key={item.id}><span>{item.role === 'user' ? 'You' : 'Assistant'}</span><p>{item.content}</p></li>)
+                  : <li className="chat-empty">No messages yet. Try “Add recovery transactions and explain the relationship.”</li>}
+              </ol>
+              <label>Message<textarea aria-label="Message the model assistant" value={chatMessage} maxLength={4000} rows={3} onChange={event => setChatMessage(event.target.value)} placeholder="Describe the change you want…" /></label>
+              <div className="chat-actions"><small>Messages and model context are sent to OpenAI.</small><button className="primary-button" disabled={busy || !chatMessage.trim()} onClick={() => void sendChatMessage()}>Send message</button></div>
+            </section>
             <section className="panel preview-card">
               <div className="section-heading"><div><span className="eyebrow">Live output</span><h2>Representations</h2></div><div className="segmented" aria-label="Preview format"><button aria-pressed={preview === 'mermaid'} className={preview === 'mermaid' ? 'active' : ''} onClick={() => setPreview('mermaid')}>Mermaid</button><button aria-pressed={preview === 'drawio'} className={preview === 'drawio' ? 'active' : ''} onClick={() => setPreview('drawio')}>draw.io</button></div></div>
               {preview === 'mermaid' ? <MermaidPreview source={mermaid} /> : <DiagramPreview model={project.draft.model} />}
@@ -346,7 +427,7 @@ export function ModelWorkbench() {
               {project.versions.length ? <ol className="version-list">{project.versions.map(version => <li key={version.id}><div><strong>Version {version.versionNumber}</strong><span>{new Date(version.createdAt).toLocaleString()}</span></div><button className="text-button" onClick={() => void continueVersion(version.versionNumber)}>Open as draft</button></li>)}</ol> : <p className="empty-copy">Save the reviewed draft to create version 1.</p>}
             </section>
           </div>
-        </> : <section className="panel intake-card"><div className="section-heading"><div><span className="eyebrow">Generation incomplete</span><h1>{project.title}</h1></div><span className="status-dot">Saved without a draft</span></div><p>The previous generation did not complete. Your requirements and source files are preserved.</p><button className="primary-button" disabled={busy} onClick={() => void generate()}>Retry generation <Icon name="arrow" /></button></section>}
+        </>}
       </section>
     </div>
   </main>;

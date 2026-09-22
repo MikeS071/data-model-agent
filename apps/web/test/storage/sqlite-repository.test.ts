@@ -9,6 +9,35 @@ const directories: string[] = [];
 afterEach(() => { while (directories.length) rmSync(directories.pop()!, { recursive: true, force: true }); });
 
 describe('SQLite project and version lifecycle', () => {
+  it('updates pre-generation intake and deletes the project with its dependent records', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'data-model-agent-')); directories.push(directory);
+    const repository = new SqliteModelRepository(join(directory, 'models.db'));
+    const project = repository.createProject({ title: 'First name', requirements: 'First requirements.', sources: [] });
+
+    const updated = repository.updateProject(project.id, {
+      title: 'Claims Payment', requirements: 'Revised requirements.', sources: claimSources,
+    });
+    expect([updated.title, updated.requirements, updated.sources.map(source => source.name)]).toEqual([
+      'Claims Payment', 'Revised requirements.', ['claim-payment.md', 'existing.ddl'],
+    ]);
+
+    repository.saveWorkingDraft(project.id, generatedClaimPayment);
+    const revised = structuredClone(generatedClaimPayment);
+    revised.model.businessDefinition = 'Revised through chat.';
+    repository.saveChatTurn(project.id, 'Revise the definition.', 'I revised the definition.', revised);
+    expect(repository.getProject(project.id)?.messages.map(message => [message.role, message.content])).toEqual([
+      ['user', 'Revise the definition.'], ['assistant', 'I revised the definition.'],
+    ]);
+    expect(repository.getProject(project.id)?.draft?.model.businessDefinition).toBe('Revised through chat.');
+    repository.saveVersion(project.id);
+    expect(repository.deleteProject(project.id)).toBe(true);
+    expect(repository.getProject(project.id)).toBeNull();
+    expect(repository.getVersion(project.id, 1)).toBeNull();
+    expect(repository.listProjects()).toEqual([]);
+    expect(repository.deleteProject(project.id)).toBe(false);
+    repository.close();
+  });
+
   it('preserves sources, autosaves one draft and creates immutable versions', () => {
     const directory = mkdtempSync(join(tmpdir(), 'data-model-agent-')); directories.push(directory);
     const repository = new SqliteModelRepository(join(directory, 'models.db'));

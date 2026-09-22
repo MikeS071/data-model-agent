@@ -10,6 +10,9 @@ export function getModelService(): ModelService {
   const filename = basename(process.env.DATA_MODEL_DB_FILE ?? 'data-model-agent.db');
   const path = join(process.cwd(), 'data', filename);
   const repository = globalState.__dataModelRepository ??= new SqliteModelRepository(path);
-  const provider: ModelProvider = { generate: request => OpenAIModelProvider.fromEnvironment().generate(request) };
+  const provider: ModelProvider = {
+    generate: request => OpenAIModelProvider.fromEnvironment().generate(request),
+    revise: request => OpenAIModelProvider.fromEnvironment().revise(request),
+  };
   return new ModelService(repository, provider);
 }

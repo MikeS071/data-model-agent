@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createProject, downloadVersion, generateDraft, listProjects, saveVersion } from '@/server/http';
+import { chatWithModel, createProject, deleteProject, downloadVersion, generateDraft, listProjects, saveVersion, updateProject } from '@/server/http';
 import { ModelService } from '@/application/model-service';
 import type { ModelProvider } from '@/provider/model-provider';
 import { SqliteModelRepository } from '@/storage/sqlite-repository';
@@ -14,7 +14,10 @@ afterEach(() => { while (directories.length) rmSync(directories.pop()!, { recurs
 function harness() {
   const directory = mkdtempSync(join(tmpdir(), 'data-model-http-')); directories.push(directory);
   const repository = new SqliteModelRepository(join(directory, 'models.db'));
-  const provider: ModelProvider = { async generate() { return structuredClone(generatedClaimPayment); } };
+  const provider: ModelProvider = {
+    async generate() { return structuredClone(generatedClaimPayment); },
+    async revise() { return { ...structuredClone(generatedClaimPayment), assistantMessage: 'The model now includes recovery transactions.' }; },
+  };
   return { repository, service: new ModelService(repository, provider) };
 }
 
@@ -55,6 +58,39 @@ describe('project HTTP boundary', () => {
     const body = await response.text();
     expect(JSON.parse(body)).toEqual({ error: 'project-input-invalid' });
     expect(body).not.toContain('PRIVATE-MARKER');
+    repository.close();
+  });
+
+  it('updates and deletes an ungenerated project through observable responses', async () => {
+    const { repository, service } = harness();
+    const created = await (await createProject(new Request('http://local/api/projects', {
+      method: 'POST', body: JSON.stringify({ title: 'First name', requirements: 'First requirements.', sources: [] }),
+    }), service)).json();
+    const updatedResponse = await updateProject(created.id, new Request('http://local/api/projects/project-1', {
+      method: 'PUT', body: JSON.stringify({ title: 'Claims Payment', requirements: 'Revised requirements.', sources: claimSources }),
+    }), service);
+    expect(updatedResponse.status).toBe(200);
+    expect(await updatedResponse.json()).toEqual(expect.objectContaining({
+      id: created.id, title: 'Claims Payment', requirements: 'Revised requirements.',
+    }));
+
+    expect(deleteProject(created.id, service).status).toBe(204);
+    expect(service.getProject(created.id)).toBeNull();
+    expect(deleteProject(created.id, service).status).toBe(404);
+    repository.close();
+  });
+
+  it('updates a generated model through project chat', async () => {
+    const { repository, service } = harness();
+    const project = await service.createAndGenerate({ title: 'Claim Payment', requirements: 'Model claim payments.', sources: claimSources });
+    const response = await chatWithModel(project.id, new Request('http://local/api/projects/project-1/chat', {
+      method: 'POST', body: JSON.stringify({ message: 'Add recovery transactions.' }),
+    }), service);
+    expect(response.status).toBe(200);
+    expect((await response.json()).messages).toEqual([
+      expect.objectContaining({ role: 'user', content: 'Add recovery transactions.' }),
+      expect.objectContaining({ role: 'assistant', content: 'The model now includes recovery transactions.' }),
+    ]);
     repository.close();
   });
 });

@@ -23,7 +23,7 @@ describe('Michal modelling workflow', () => {
       id: 'project-1', title: 'Claim Payment', requirements: 'Model claim payments.',
       createdAt: '2026-09-22T00:00:00Z', updatedAt: '2026-09-22T00:00:00Z',
       sources: [{ id: 'source-1', ordinal: 0, name: 'claims.ddl', kind: 'ddl', content: 'CREATE TABLE claim(id UUID);' }],
-      draft: null, versions: [],
+      draft: null, versions: [], messages: [],
     };
     let current = project;
     const calls: Array<{ url: string; method: string; body: unknown }> = [];
@@ -35,6 +35,13 @@ describe('Michal modelling workflow', () => {
       if (url === '/api/projects' && method === 'POST') { current = { ...project, ...(body as object) }; return Response.json(current, { status: 201 }); }
       if (url.endsWith('/generate')) { current = { ...current, draft: generatedClaimPayment }; return Response.json(current); }
       if (url.endsWith('/draft')) { current = { ...current, draft: body as typeof generatedClaimPayment }; return Response.json(body); }
+      if (url.endsWith('/chat')) {
+        current = { ...current, draft: { ...generatedClaimPayment, model: { ...generatedClaimPayment.model, businessDefinition: 'Includes recovery transactions.' } }, messages: [
+          { id: 'message-1', role: 'user', content: (body as { message: string }).message, createdAt: '2026-09-22T00:02:00Z' },
+          { id: 'message-2', role: 'assistant', content: 'I added recovery transactions.', createdAt: '2026-09-22T00:02:01Z' },
+        ] };
+        return Response.json(current);
+      }
       if (url.endsWith('/versions')) {
         const version = { ...generatedClaimPayment, id: 'version-1', projectId: 'project-1', versionNumber: 1,
           createdAt: '2026-09-22T00:01:00Z', sources: current.sources, mermaid: 'erDiagram', drawio: '<mxfile/>' };
@@ -68,6 +75,11 @@ describe('Michal modelling workflow', () => {
     await waitFor(() => expect(calls.some(call => call.url.endsWith('/draft') && JSON.stringify(call.body).includes('paid_total <= approved_amount'))).toBe(true));
     await user.click(screen.getByRole('button', { name: /Add relationship/u }));
     expect(screen.getByLabelText('Relationship 2 name')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Model chat' })).toBeTruthy();
+    await user.type(screen.getByLabelText('Message the model assistant'), 'Add recovery transactions.');
+    await user.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(await screen.findByText('I added recovery transactions.')).toBeTruthy();
+    expect(screen.getByDisplayValue('Includes recovery transactions.')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Save version' }));
     expect((await screen.findByRole('link', { name: 'Download Mermaid v1' })).getAttribute('href')).toBe('/api/projects/project-1/downloads/mermaid?version=1');
     expect(screen.getByRole('link', { name: 'Download draw.io v1' }).getAttribute('href')).toBe('/api/projects/project-1/downloads/drawio?version=1');
@@ -78,5 +90,57 @@ describe('Michal modelling workflow', () => {
     render(<ModelWorkbench />);
     expect(await screen.findByText(/Generate sends the supplied material to OpenAI/u)).toBeTruthy();
     expect(screen.getByText(/local single-user pilot/iu)).toBeTruthy();
+  });
+
+  it('saves, edits and deletes a model before provider generation', async () => {
+    let current: ProjectRecord | null = null;
+    const calls: Array<{ url: string; method: string; body: unknown }> = [];
+    vi.stubGlobal('confirm', vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true));
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      calls.push({ url, method, body });
+      if (url === '/api/projects' && method === 'GET') return Response.json(current ? [{
+        id: current.id, title: current.title, updatedAt: current.updatedAt, versionCount: 0, hasDraft: false,
+      }] : []);
+      if (url === '/api/projects' && method === 'POST') {
+        current = {
+          id: 'project-1', createdAt: '2026-09-22T00:00:00Z', updatedAt: '2026-09-22T00:00:00Z',
+          title: (body as { title: string }).title, requirements: (body as { requirements: string }).requirements,
+          sources: [], draft: null, versions: [],
+          messages: [],
+        };
+        return Response.json(current, { status: 201 });
+      }
+      if (url === '/api/projects/project-1' && method === 'PUT') {
+        current = { ...current!, ...(body as Pick<ProjectRecord, 'title' | 'requirements'>) };
+        return Response.json(current);
+      }
+      if (url === '/api/projects/project-1' && method === 'DELETE') { current = null; return new Response(null, { status: 204 }); }
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await screen.findByText('No saved models yet');
+    await user.type(screen.getByLabelText('Model name'), 'Claim Payment');
+    await user.type(screen.getByLabelText('Requirements'), 'Initial requirements.');
+    await user.click(screen.getByRole('button', { name: 'Save model' }));
+    expect(await screen.findByRole('button', { name: 'Delete model' })).toBeTruthy();
+    expect(calls.some(call => call.url === '/api/projects' && call.method === 'POST')).toBe(true);
+
+    const requirements = screen.getByLabelText('Requirements');
+    await user.clear(requirements);
+    await user.type(requirements, 'Revised requirements.');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(calls.some(call => call.method === 'PUT' && (call.body as { requirements?: string })?.requirements === 'Revised requirements.')).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: 'Delete model' }));
+    expect(calls.some(call => call.method === 'DELETE')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Delete model' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Delete model' }));
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('cannot be undone'));
+    expect(await screen.findByText('No saved models yet')).toBeTruthy();
+    expect(calls.some(call => call.method === 'DELETE')).toBe(true);
   });
 });
