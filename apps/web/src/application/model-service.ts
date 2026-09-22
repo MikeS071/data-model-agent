@@ -53,7 +53,7 @@ export class ModelService {
     const history = project.messages.slice(-12).map(({ role, content }) => ({ role, content }));
     const revision = parseRevisionResult(await this.provider.revise({
       requirements: project.requirements, sources, currentModel: project.draft.model,
-      clarification: null, message, history,
+      clarification: project.draft.clarificationQuestions[0] ?? null, message, history,
     }));
     return this.repository.saveChatTurn(projectId, message, revision.assistantMessage, revision);
   }

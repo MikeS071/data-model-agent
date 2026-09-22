@@ -93,7 +93,6 @@ export function ModelWorkbench() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [intake, setIntake] = useState(emptyDraft);
-  const [clarification, setClarification] = useState('');
   const [chatMessage, setChatMessage] = useState('');
   const [status, setStatus] = useState('Ready');
   const [error, setError] = useState('');
@@ -196,9 +195,9 @@ export function ModelWorkbench() {
       if (!target?.draft) target = await persistIntake();
       setStatus('Generating with OpenAI…');
       target = await requestJson<Project>(`/api/projects/${target.id}/generate`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clarification: clarification || null }),
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clarification: null }),
       });
-      setProject(target); setClarification(''); setDirty(false); setStatus('Draft ready');
+      setProject(target); setDirty(false); setStatus('Draft ready');
       await refreshProjects();
     } catch (error) { setError(message(error)); setStatus('Generation stopped'); await refreshProjects().catch(() => undefined); }
   };
@@ -313,14 +312,26 @@ export function ModelWorkbench() {
             <div className="header-actions"><span className="status-dot" aria-live="polite">{status}</span><button className="secondary-button" disabled={busy} onClick={() => void generate()}>Regenerate</button><button className="primary-button" disabled={busy} onClick={() => void saveVersion()}>Save version</button><button className="danger-button" disabled={busy} onClick={() => void removeProject()}>Delete model</button></div>
           </section>
 
-          {(project.draft.assumptions.length > 0 || project.draft.warnings.length > 0 || project.draft.clarificationQuestions.length > 0) && <section className="review-grid">
-            <div className="panel review-card"><span className="card-label">Assumptions</span>{project.draft.assumptions.length ? <ul>{project.draft.assumptions.map(item => <li key={item}>{item}</li>)}</ul> : <p>None</p>}</div>
-            <div className="panel review-card warning"><span className="card-label">Warnings</span>{project.draft.warnings.length ? <ul>{project.draft.warnings.map(item => <li key={item}>{item}</li>)}</ul> : <p>No warnings</p>}</div>
-            <div className="panel review-card question"><span className="card-label">Next clarification</span><p>{project.draft.clarificationQuestions[0] ?? 'No open questions'}</p>
-              {project.draft.clarificationQuestions[0] && <><label>Answer<input aria-label="Clarification answer" value={clarification} onChange={event => setClarification(event.target.value)} placeholder="Answer this question" /></label><button className="text-button" disabled={busy || !clarification.trim()} onClick={() => void generate()}>Update draft <Icon name="arrow" /></button></>}</div>
-          </section>}
+          <div className="model-collaboration-grid">
+            <section className="panel preview-card" role="region" aria-label="Live model output">
+              <div className="section-heading"><div><span className="eyebrow">Live output</span><h2>Model representations</h2><p>Both views are derived from the canonical model and update with each saved change.</p></div><div className="segmented" aria-label="Preview format"><button aria-pressed={preview === 'mermaid'} className={preview === 'mermaid' ? 'active' : ''} onClick={() => setPreview('mermaid')}>Mermaid</button><button aria-pressed={preview === 'drawio'} className={preview === 'drawio' ? 'active' : ''} onClick={() => setPreview('drawio')}>draw.io</button></div></div>
+              {preview === 'mermaid' ? <MermaidPreview source={mermaid} /> : <DiagramPreview model={project.draft.model} />}
+              <details className="json-details"><summary>Canonical JSON <span>Read only</span></summary><pre className="code-preview">{JSON.stringify(project.draft.model, null, 2)}</pre></details>
+            </section>
 
-          <section className="panel editor-card">
+            <section className="panel assistant-card" role="region" aria-label="Model chat">
+              <div className="section-heading"><div><span className="eyebrow">Model assistant</span><h2>Shape the model together</h2><p>Answer the next question or describe another change. Every successful reply updates the model.</p></div></div>
+              <ol className="chat-transcript" aria-live="polite">
+                {project.messages.map(item => <li className={`chat-message ${item.role}`} key={item.id}><span>{item.role === 'user' ? 'You' : 'Assistant'}</span><p>{item.content}</p></li>)}
+                {project.draft.clarificationQuestions[0] ? <li className="chat-message assistant clarification-prompt"><span>Next clarification</span><p>{project.draft.clarificationQuestions[0]}</p></li>
+                  : project.messages.length === 0 && <li className="chat-empty">No open questions. Try “Add recovery transactions and explain the relationship.”</li>}
+              </ol>
+              <label>{project.draft.clarificationQuestions[0] ? 'Answer or request a change' : 'Message'}<textarea aria-label="Message the model assistant" value={chatMessage} maxLength={4000} rows={3} onChange={event => setChatMessage(event.target.value)} placeholder={project.draft.clarificationQuestions[0] ? 'Answer the question or describe another change…' : 'Describe the change you want…'} /></label>
+              <div className="chat-actions"><small>Your message, current model and source context are sent to OpenAI.</small><button className="primary-button" disabled={busy || !chatMessage.trim()} onClick={() => void sendChatMessage()}>Send message <Icon name="arrow" /></button></div>
+            </section>
+          </div>
+
+          <section className="panel editor-card" role="region" aria-label="Structured model editor">
             <div className="section-heading"><div><span className="eyebrow">Canonical model</span><h2>Structured editor</h2><p>Edit the source of truth. Changes autosave to this working draft.</p></div><span className="count-badge">{project.draft.model.entities.length} entities · {project.draft.model.relationships.length} relationships</span></div>
             <div className="model-fields">
               <label>Model name<input aria-label="Canonical model name" value={project.draft.model.name} onChange={event => updateModel(model => { model.name = event.target.value; })} /></label>
@@ -407,26 +418,14 @@ export function ModelWorkbench() {
             </article>)}<button className="text-button editor-add" onClick={() => updateModel(model => model.rules.push({ id: crypto.randomUUID(), name: `Rule ${model.rules.length + 1}`, expression: 'Define expression', businessDefinition: 'Define this validation rule.', entityIds: [model.entities[0].id] }))}><Icon name="plus" />Add validation rule</button></div>
           </section>
 
-          <div className="preview-rail">
-            <section className="panel assistant-card" role="region" aria-label="Model chat">
-              <div className="section-heading"><div><span className="eyebrow">Model assistant</span><h2>Change the model by conversation</h2><p>Ask for a change and review the updated structured model beside this chat.</p></div></div>
-              <ol className="chat-transcript" aria-live="polite">
-                {project.messages.length ? project.messages.map(item => <li className={`chat-message ${item.role}`} key={item.id}><span>{item.role === 'user' ? 'You' : 'Assistant'}</span><p>{item.content}</p></li>)
-                  : <li className="chat-empty">No messages yet. Try “Add recovery transactions and explain the relationship.”</li>}
-              </ol>
-              <label>Message<textarea aria-label="Message the model assistant" value={chatMessage} maxLength={4000} rows={3} onChange={event => setChatMessage(event.target.value)} placeholder="Describe the change you want…" /></label>
-              <div className="chat-actions"><small>Messages and model context are sent to OpenAI.</small><button className="primary-button" disabled={busy || !chatMessage.trim()} onClick={() => void sendChatMessage()}>Send message</button></div>
-            </section>
-            <section className="panel preview-card">
-              <div className="section-heading"><div><span className="eyebrow">Live output</span><h2>Representations</h2></div><div className="segmented" aria-label="Preview format"><button aria-pressed={preview === 'mermaid'} className={preview === 'mermaid' ? 'active' : ''} onClick={() => setPreview('mermaid')}>Mermaid</button><button aria-pressed={preview === 'drawio'} className={preview === 'drawio' ? 'active' : ''} onClick={() => setPreview('drawio')}>draw.io</button></div></div>
-              {preview === 'mermaid' ? <MermaidPreview source={mermaid} /> : <DiagramPreview model={project.draft.model} />}
-              <details className="json-details"><summary>Canonical JSON <span>Read only</span></summary><pre className="code-preview">{JSON.stringify(project.draft.model, null, 2)}</pre></details>
-            </section>
+          <section className="panel history-card"><div className="section-heading"><div><span className="eyebrow">Review points</span><h2>Version history</h2><p>Freeze reviewed milestones and reopen an earlier version as a new working draft.</p></div></div>{latest && <div className="download-actions"><a download={`${downloadStem}-v${latest}.mmd`} href={`/api/projects/${project.id}/downloads/mermaid?version=${latest}`}>Download Mermaid v{latest}</a><a download={`${downloadStem}-v${latest}.drawio`} href={`/api/projects/${project.id}/downloads/drawio?version=${latest}`}>Download draw.io v{latest}</a></div>}
+            {project.versions.length ? <ol className="version-list">{project.versions.map(version => <li key={version.id}><div><strong>Version {version.versionNumber}</strong><span>{new Date(version.createdAt).toLocaleString()}</span></div><button className="text-button" onClick={() => void continueVersion(version.versionNumber)}>Open as draft</button></li>)}</ol> : <p className="empty-copy">Save the reviewed draft to create version 1.</p>}
+          </section>
 
-            <section className="panel history-card"><div className="section-heading"><div><span className="eyebrow">Review points</span><h2>Version history</h2></div></div>{latest && <div className="download-actions"><a download={`${downloadStem}-v${latest}.mmd`} href={`/api/projects/${project.id}/downloads/mermaid?version=${latest}`}>Download Mermaid v{latest}</a><a download={`${downloadStem}-v${latest}.drawio`} href={`/api/projects/${project.id}/downloads/drawio?version=${latest}`}>Download draw.io v{latest}</a></div>}
-              {project.versions.length ? <ol className="version-list">{project.versions.map(version => <li key={version.id}><div><strong>Version {version.versionNumber}</strong><span>{new Date(version.createdAt).toLocaleString()}</span></div><button className="text-button" onClick={() => void continueVersion(version.versionNumber)}>Open as draft</button></li>)}</ol> : <p className="empty-copy">Save the reviewed draft to create version 1.</p>}
-            </section>
-          </div>
+          <section className="review-grid bottom-review" role="region" aria-label="Assumptions and warnings">
+            <div className="panel review-card"><span className="card-label">Assumptions</span>{project.draft.assumptions.length ? <ul>{project.draft.assumptions.map(item => <li key={item}>{item}</li>)}</ul> : <p>No assumptions recorded.</p>}</div>
+            <div className="panel review-card warning"><span className="card-label">Warnings</span>{project.draft.warnings.length ? <ul>{project.draft.warnings.map(item => <li key={item}>{item}</li>)}</ul> : <p>No warnings.</p>}</div>
+          </section>
         </>}
       </section>
     </div>

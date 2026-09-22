@@ -248,6 +248,7 @@ export class OpenAIModelProvider implements ModelProvider {
       `Requirements:\n${request.requirements}`,
       sources ? `Source artifacts:\n${sources}` : '',
       `Current canonical model:\n${JSON.stringify(request.currentModel)}`,
+      request.clarification ? `Open clarification:\n${request.clarification}` : '',
       request.history.length ? `Recent project conversation:\n${JSON.stringify(request.history)}` : '',
       `New user message:\n${request.message}`,
     ].filter(Boolean).join('\n\n');
@@ -255,7 +256,7 @@ export class OpenAIModelProvider implements ModelProvider {
       input,
       'data_model_revision',
       revisionJsonSchema,
-      'Act as a careful data-modelling collaborator. Respond briefly to the user, then return the complete revised canonical model. Preserve stable IDs and supplied facts unless the requested change requires otherwise. Keep assumptions, warnings and clarification questions explicit; never invent ambiguous relationships.',
+      'Act as a careful data-modelling collaborator. Respond briefly to the user, then return the complete revised canonical model. If the user answers the open clarification, apply the answer and remove or advance that question; otherwise retain unresolved questions unless the requested change invalidates them. Preserve stable IDs and supplied facts unless the requested change requires otherwise. Keep assumptions, warnings and clarification questions explicit; never invent ambiguous relationships.',
     );
   }
 }

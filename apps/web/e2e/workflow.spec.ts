@@ -3,7 +3,6 @@ import { generatedClaimPayment } from '../test/fixtures/claim-payment';
 
 test('Michal can generate, refine, preview and version a claim payment model', async ({ page }) => {
   let generationCount = 0;
-  let clarificationSent = '';
   let created = false;
   const project = {
     id: 'project-1',
@@ -51,7 +50,6 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     }
     if (path.endsWith('/generate') && method === 'POST') {
       generationCount += 1;
-      clarificationSent = (request.postDataJSON() as { clarification: string | null }).clarification ?? '';
       project.draft = generationCount === 1
         ? { ...structuredClone(generatedClaimPayment), warnings: ['Confirm whether external payment references must be unique.'], clarificationQuestions: ['Should an external payment reference be unique?'] }
         : structuredClone(generatedClaimPayment);
@@ -63,13 +61,21 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     }
     if (path.endsWith('/chat') && method === 'POST') {
       const message = (request.postDataJSON() as { message: string }).message;
+      const answeringQuestion = message.startsWith('Yes,');
       project.draft = {
         ...structuredClone(generatedClaimPayment),
-        model: { ...structuredClone(generatedClaimPayment.model), businessDefinition: 'Tracks claims, payments and recovery transactions.' },
+        model: {
+          ...structuredClone(generatedClaimPayment.model),
+          businessDefinition: answeringQuestion
+            ? 'Tracks claim payments with unique platform references.'
+            : 'Tracks claims, payments and recovery transactions.',
+        },
       };
-      project.messages = [
-        { id: 'message-1', role: 'user', content: message, createdAt: '2026-09-22T00:02:00Z' },
-        { id: 'message-2', role: 'assistant', content: 'I added recovery transactions and updated the model definition.', createdAt: '2026-09-22T00:02:01Z' },
+      project.messages = [...project.messages,
+        { id: `message-${project.messages.length + 1}`, role: 'user', content: message, createdAt: '2026-09-22T00:02:00Z' },
+        { id: `message-${project.messages.length + 2}`, role: 'assistant', content: answeringQuestion
+          ? 'I applied the uniqueness requirement and cleared the question.'
+          : 'I added recovery transactions and updated the model definition.', createdAt: '2026-09-22T00:02:01Z' },
       ];
       return json(project);
     }
@@ -120,10 +126,23 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await entityEditors.nth(1).locator('summary').click();
   await expect(page.getByLabel('Entity name Payment')).toBeVisible();
 
-  await page.getByLabel('Clarification answer').fill('Yes, within the payment platform.');
-  await page.getByRole('button', { name: /Update draft/u }).click();
-  await expect(page.getByText('No open questions')).toBeVisible();
-  expect(clarificationSent).toBe('Yes, within the payment platform.');
+  const liveOutput = page.getByRole('region', { name: 'Live model output' });
+  const chat = page.getByRole('region', { name: 'Model chat' });
+  const editor = page.getByRole('region', { name: 'Structured model editor' });
+  const review = page.getByRole('region', { name: 'Assumptions and warnings' });
+  const outputBox = await liveOutput.boundingBox();
+  const chatBox = await chat.boundingBox();
+  const editorBox = await editor.boundingBox();
+  const reviewBox = await review.boundingBox();
+  expect(outputBox && chatBox && outputBox.x + outputBox.width <= chatBox.x + 1).toBeTruthy();
+  expect(outputBox && chatBox && editorBox && editorBox.y >= Math.max(outputBox.y + outputBox.height, chatBox.y + chatBox.height) - 1).toBeTruthy();
+  expect(editorBox && reviewBox && reviewBox.y >= editorBox.y + editorBox.height - 1).toBeTruthy();
+
+  await page.getByLabel('Message the model assistant').fill('Yes, within the payment platform.');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('I applied the uniqueness requirement and cleared the question.')).toBeVisible();
+  await expect(page.getByText('Should an external payment reference be unique?')).toHaveCount(0);
+  await expect(page.getByLabel('Canonical model business definition')).toHaveValue('Tracks claim payments with unique platform references.');
 
   const entityName = page.getByLabel('Entity name Claim');
   await entityName.fill('Insurance Claim');
@@ -135,13 +154,16 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await page.getByText(/Canonical JSON/u).click();
   await expect(page.locator('pre').filter({ hasText: 'Insurance Claim' })).toBeVisible();
 
-  const editorBox = await page.locator('.editor-card').boundingBox();
-  const chatBox = await page.getByRole('region', { name: 'Model chat' }).boundingBox();
-  expect(editorBox && chatBox && editorBox.x + editorBox.width <= chatBox.x + 1).toBeTruthy();
   await page.getByLabel('Message the model assistant').fill('Add recovery transactions.');
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.getByText('I added recovery transactions and updated the model definition.')).toBeVisible();
   await expect(page.getByLabel('Canonical model business definition')).toHaveValue('Tracks claims, payments and recovery transactions.');
+
+  const buttonTypography = await page.locator('.app-shell button').evaluateAll(buttons => buttons.map(button => {
+    const style = getComputedStyle(button);
+    return `${style.fontFamily}|${style.fontSize}|${style.fontWeight}`;
+  }));
+  expect([...new Set(buttonTypography)]).toEqual([buttonTypography[0]]);
 
   await page.getByRole('button', { name: 'Save version' }).click();
   await expect(page.getByText('Version 1')).toBeVisible();

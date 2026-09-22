@@ -64,7 +64,11 @@ describe('model application service', () => {
   });
 
   it('uses project chat to atomically persist the assistant reply and revised draft', async () => {
-    const { repository, revisions, service } = harness();
+    const draftWithQuestion = {
+      ...structuredClone(generatedClaimPayment),
+      clarificationQuestions: ['Should an external payment reference be unique?'],
+    };
+    const { repository, revisions, service } = harness(draftWithQuestion);
     const project = await service.createAndGenerate({ title: 'Claim Payment', requirements: 'Model claim payments.', sources: claimSources });
     const revised = await service.reviseFromChat(project.id, 'Add recovery transactions.');
 
@@ -75,6 +79,7 @@ describe('model application service', () => {
     ]);
     expect(revisions).toEqual([expect.objectContaining({
       requirements: 'Model claim payments.', currentModel: generatedClaimPayment.model,
+      clarification: 'Should an external payment reference be unique?',
       message: 'Add recovery transactions.', history: [],
     })]);
     repository.close();

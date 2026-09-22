@@ -98,12 +98,14 @@ describe('OpenAI Responses boundary', () => {
     const provider = new OpenAIModelProvider({ apiKey: 'x', model: 'm', fetcher, diagnostics: () => undefined });
     const result = await provider.revise({
       requirements: 'Model claims.', sources: claimSources, currentModel: generatedClaimPayment.model,
-      clarification: null, message: 'Add recovery transactions.', history: [],
+      clarification: 'Should an external payment reference be unique?',
+      message: 'Yes, within the payment platform.', history: [],
     });
     expect(result).toEqual({ ...generatedClaimPayment, assistantMessage: 'I added recovery transactions.' });
     const body = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
     expect(body.text.format.name).toBe('data_model_revision');
-    expect(body.input).toContain('Add recovery transactions.');
+    expect(body.input).toContain('Should an external payment reference be unique?');
+    expect(body.input).toContain('Yes, within the payment platform.');
     expect(body.input).toContain('Claim Payment');
   });
 });

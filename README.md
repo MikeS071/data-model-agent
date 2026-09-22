@@ -11,11 +11,14 @@ The first worked example models Claim and Payment for a large insurance organisa
 - Start from free-form requirements and `.md`, `.txt`, `.sql`, `.ddl` or `.json` files.
 - Save, reopen, edit or delete a model before making any OpenAI request.
 - Generate a structured draft through a server-side OpenAI integration.
-- Review assumptions, warnings and one clarification question at a time.
+- Work with the live model output and project assistant side by side at the top of the
+  working draft.
+- Answer one clarification question at a time through the same chat used for model
+  changes; successful answers update the canonical draft.
 - Edit model definitions, entities, attributes, keys, references, layout, relationships
   and validation rules in structured forms.
-- Ask the project assistant to change a built model while the structured editor remains
-  visible beside the conversation.
+- Edit the canonical structure below the live output, then review assumptions and
+  warnings at the bottom of the workbench.
 - Autosave a working draft and deliberately create immutable versions.
 - Preview and download Mermaid and draw.io output from the same canonical model.
 - Reopen a saved version as a new working draft without changing its history.
@@ -76,19 +79,21 @@ Open `http://127.0.0.1:3000`.
 
 ## Run the Claim Payment workflow
 
-1. Select **New**, name the model `Claim Payment`, and describe the insurance claim
+1. Select **New model**, name the model `Claim Payment`, and describe the insurance claim
    payment domain in **Requirements**. Select **Save model** whenever you want to keep the
    intake without contacting OpenAI; you can reopen, edit or delete it before generation.
 2. Attach any available Markdown, schema, SQL, DDL or JSON files. The UI shows every
    accepted source before generation.
 3. Select **Generate draft**. Review the visible transmission notice first.
-4. Review the assumptions and warnings. If the draft asks a question, answer it and use
-   **Update draft**; only the first open clarification is shown.
-5. Refine the canonical model in the structured editor. Draft changes autosave. You can
-   also ask the **Model assistant** for a change; its response and the fully validated
-   revised model are saved together, and the updated fields remain visible beside chat.
-6. Compare the Mermaid and draw.io previews and expand **Canonical JSON · read only** if
-   you need to inspect the underlying model.
+4. Work across the top row: compare the live Mermaid or draw.io output with the **Model
+   assistant** beside it. If the assistant shows **Next clarification**, answer directly
+   in the chat box and select **Send message**. The answer and the pending question are
+   sent with the current model; a successful reply updates the validated draft and moves
+   to the next question.
+5. Refine the canonical model in the structured editor below the live output. Form changes
+   autosave. You can use the same chat at any time to request another model change.
+6. Expand **Canonical JSON · read only** when you need to inspect the underlying model,
+   and review the assumptions and warnings in the final section at the bottom.
 7. Select **Save version** when the draft is ready for review. Download either format or
    choose **Open as draft** on a historical version to continue from it.
 

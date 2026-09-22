@@ -26,6 +26,11 @@ describe('Michal modelling workflow', () => {
       draft: null, versions: [], messages: [],
     };
     let current = project;
+    const generatedWithQuestion = {
+      ...structuredClone(generatedClaimPayment),
+      warnings: ['Confirm whether external payment references must be unique.'],
+      clarificationQuestions: ['Should an external payment reference be unique?'],
+    };
     const calls: Array<{ url: string; method: string; body: unknown }> = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input), method = init?.method ?? 'GET';
@@ -33,12 +38,23 @@ describe('Michal modelling workflow', () => {
       calls.push({ url, method, body });
       if (url === '/api/projects' && method === 'GET') return Response.json([]);
       if (url === '/api/projects' && method === 'POST') { current = { ...project, ...(body as object) }; return Response.json(current, { status: 201 }); }
-      if (url.endsWith('/generate')) { current = { ...current, draft: generatedClaimPayment }; return Response.json(current); }
+      if (url.endsWith('/generate')) { current = { ...current, draft: generatedWithQuestion }; return Response.json(current); }
       if (url.endsWith('/draft')) { current = { ...current, draft: body as typeof generatedClaimPayment }; return Response.json(body); }
       if (url.endsWith('/chat')) {
-        current = { ...current, draft: { ...generatedClaimPayment, model: { ...generatedClaimPayment.model, businessDefinition: 'Includes recovery transactions.' } }, messages: [
-          { id: 'message-1', role: 'user', content: (body as { message: string }).message, createdAt: '2026-09-22T00:02:00Z' },
-          { id: 'message-2', role: 'assistant', content: 'I added recovery transactions.', createdAt: '2026-09-22T00:02:01Z' },
+        const userMessage = (body as { message: string }).message;
+        const answeringQuestion = userMessage.startsWith('Yes,');
+        current = { ...current, draft: {
+          ...generatedClaimPayment,
+          model: {
+            ...generatedClaimPayment.model,
+            businessDefinition: answeringQuestion
+              ? 'Tracks claim payments with unique platform references.'
+              : 'Includes recovery transactions.',
+          },
+        }, messages: [
+          ...(current.messages ?? []),
+          { id: `message-${(current.messages?.length ?? 0) + 1}`, role: 'user', content: userMessage, createdAt: '2026-09-22T00:02:00Z' },
+          { id: `message-${(current.messages?.length ?? 0) + 2}`, role: 'assistant', content: answeringQuestion ? 'I applied the uniqueness requirement and cleared the question.' : 'I added recovery transactions.', createdAt: '2026-09-22T00:02:01Z' },
         ] };
         return Response.json(current);
       }
@@ -65,6 +81,22 @@ describe('Michal modelling workflow', () => {
     expect((calls.find(call => call.url === '/api/projects' && call.method === 'POST')?.body as { sources: Array<{ kind: string }> }).sources[0].kind).toBe('ddl');
     expect(screen.getByLabelText('claim_id reference')).toBeTruthy();
 
+    const liveOutput = screen.getByRole('region', { name: 'Live model output' });
+    const chat = screen.getByRole('region', { name: 'Model chat' });
+    const editor = screen.getByRole('region', { name: 'Structured model editor' });
+    const review = screen.getByRole('region', { name: 'Assumptions and warnings' });
+    expect(liveOutput.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chat.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(editor.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Model chat' }).textContent).toContain('Should an external payment reference be unique?');
+    expect(screen.queryByLabelText('Clarification answer')).toBeNull();
+
+    await user.type(screen.getByLabelText('Message the model assistant'), 'Yes, within the payment platform.');
+    await user.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(await screen.findByText('I applied the uniqueness requirement and cleared the question.')).toBeTruthy();
+    expect(screen.getByDisplayValue('Tracks claim payments with unique platform references.')).toBeTruthy();
+    expect(screen.queryByText('Should an external payment reference be unique?')).toBeNull();
+
     const entityName = screen.getByLabelText('Entity name Claim');
     await user.clear(entityName);
     await user.type(entityName, 'Insurance Claim');
@@ -75,7 +107,6 @@ describe('Michal modelling workflow', () => {
     await waitFor(() => expect(calls.some(call => call.url.endsWith('/draft') && JSON.stringify(call.body).includes('paid_total <= approved_amount'))).toBe(true));
     await user.click(screen.getByRole('button', { name: /Add relationship/u }));
     expect(screen.getByLabelText('Relationship 2 name')).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Model chat' })).toBeTruthy();
     await user.type(screen.getByLabelText('Message the model assistant'), 'Add recovery transactions.');
     await user.click(screen.getByRole('button', { name: 'Send message' }));
     expect(await screen.findByText('I added recovery transactions.')).toBeTruthy();
