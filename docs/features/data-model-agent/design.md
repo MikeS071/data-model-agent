@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 2
+revision: 3
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -146,9 +146,12 @@ HTML or scripts.
 
 Clicking Generate sends the normalized supplied material directly through the server-only
 OpenAI adapter. The adapter uses the Responses API with a JSON Schema structured-output
-contract, a configured model, bounded timeout and no application tools. The application
-does not rely on provider output being valid: it parses and validates locally before
-persistence. Tests replace the adapter and never make a network call.
+contract, a configured model, bounded timeout and no application tools. Provider runtime
+settings are server-only environment values: `OPENAI_TIMEOUT_MS` defaults to 120 seconds,
+`OPENAI_REASONING_EFFORT` defaults to `low`, and `OPENAI_MAX_OUTPUT_TOKENS` defaults to
+8,000. Invalid settings fail closed before a request. The application does not rely on
+provider output being valid: it parses and validates locally before persistence. Tests
+replace the adapter and never make a network call.
 
 SQLite is reachable only through the repository interface. Renderers are pure functions
 over a validated canonical model. Download endpoints derive safe filenames, set explicit
@@ -163,9 +166,11 @@ remain server-side environment variables and are never persisted, serialized int
 props or included in browser bundles.
 
 Logs contain request IDs, durations and typed error categories, not source content,
-prompts, provider responses or secrets. UI rendering escapes user-controlled text, and
-generated XML uses an XML-safe encoder. SQLite and local source records are not encrypted
-at rest in this pilot; filesystem access and backup protection remain host responsibilities.
+prompts, provider responses or secrets. Provider diagnostics record the configured model
+and non-sensitive runtime settings so a timeout, rate limit, provider rejection or
+incomplete capped response remains distinguishable. UI rendering escapes user-controlled
+text, and generated XML uses an XML-safe encoder. SQLite and local source records are not
+encrypted at rest in this pilot; filesystem access and backup protection remain host responsibilities.
 Production use requires a new request/design covering authentication, authorization,
 retention, encryption, approved provider settings and organisational data controls.
 
@@ -174,7 +179,11 @@ retention, encryption, approved provider settings and organisational data contro
 Unsupported or oversized input is rejected before storage or provider access with a
 specific correction message. Missing provider configuration disables live Generate while
 leaving saved models usable. Provider timeout, rate limit or unavailable responses retain
-the current working draft and offer an explicit retry without creating a version.
+the current working draft and offer an explicit retry without creating a version. A
+response stopped by the configured output-token cap is reported as incomplete rather than
+malformed. The synchronous pilot request has a configurable 120-second default deadline;
+streaming or background generation is deferred until representative timings show that the
+interactive request still needs a longer-running job boundary.
 
 Malformed or schema-invalid model output is never stored as a canonical model; validation
 details become a bounded error and may drive a new generation attempt. Domain ambiguity
@@ -190,8 +199,8 @@ Domain unit tests compare the canonical Claim-Payment fixture with literal expec
 entities, attributes, keys, optionality, cardinality, definitions, layout and aggregate
 rules. Input tests cover prose, Markdown, DDL, SQL, JSON, encoding, size limits and the
 rule that DDL is never executed. Provider contract tests use a fake adapter for success,
-ambiguity, invalid structure, timeout and missing configuration; a client-bundle check
-guards against credential leakage.
+ambiguity, invalid structure, timeout, incomplete output, safe diagnostics and missing or
+invalid configuration; a client-bundle check guards against credential leakage.
 
 Repository integration tests use a temporary SQLite database to prove source retention,
 autosave, transactional immutable versions, list, reopen and continue-from-version.
@@ -233,6 +242,7 @@ of scope.
 | D-011 | Require the OpenAI model to be an environment setting. | Model choice can change without source edits. | Hard-code a model. | Startup must report missing configuration clearly. |
 | D-012 | Store generated representations with each immutable version. | Reopened versions retain the exact reviewed outputs. | Regenerate every historical view. | Version storage is larger but deterministic review is simpler. |
 | D-013 | Use a responsive three-zone enterprise workbench with progressive entity disclosure and a persistent preview rail. | It keeps dense modelling tasks scannable and puts model feedback beside the edit that causes it. | Marketing hero with a single long form; separate editor and preview pages. | The layout stacks at narrower widths and UI tests must cover disclosure, focus, feedback and responsive behavior. |
+| D-014 | Make synchronous OpenAI generation bounds configurable, defaulting to a 120-second timeout, low reasoning effort and 8,000 generated tokens, with typed non-sensitive diagnostics. | The original fixed 45-second deadline aborted valid `gpt-5.6-sol` structured-output work while connectivity and model access were healthy. | Keep the fixed deadline; immediately adopt streaming/background jobs; hard-code a faster model. | Operators can tune latency without source edits; capped incomplete responses fail explicitly; streaming remains a later measured improvement. |
 
 ## Approval
 
@@ -240,3 +250,6 @@ Status: accepted. Michal explicitly accepted design revision 1 for request revis
 after the guided architecture review, then directly authorized applying the installed
 UI/UX design skill to redesign the pilot workbench. That instruction accepts revision 2's
 visual and interaction decision without changing request intent or acceptance criteria.
+After two observed 45-second provider aborts, Michal explicitly approved the proposed
+configurable provider bounds, low reasoning and diagnostic fix. That decision accepts
+revision 3 and D-014 without changing request intent or acceptance criteria.
