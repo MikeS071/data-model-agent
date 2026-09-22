@@ -2,10 +2,10 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { parseArgs } from 'node:util';
-import { digest, validateScope } from './core/scope.mjs';
+import { validateScope } from './core/scope.mjs';
 import { bindDocuments } from './core/specification.mjs';
 import { inspectConfig, inspectResult } from './core/contracts.mjs';
-import { context, adapter, applyPlan, git, projectFile, receiptFile, withApplyLock } from './core/actions.mjs';
+import { context, adapter, applyPlan, projectFile, receiptFile, withApplyLock } from './core/actions.mjs';
 import { makePlan, GovernanceError } from './core/plan.mjs';
 import { reviewPlan, inspectReview } from './core/review.mjs';
 import { artifact, reviewBundle, usageSnapshot, collectUsage } from './core/economy.mjs';
