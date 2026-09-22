@@ -6,3 +6,16 @@
 /.governance/.proof/
 /.governance/**/__pycache__/
 # dev-stack:end
+
+# Application-local generated state
+/node_modules/
+/.pnpm-store/
+/apps/web/.next/
+/apps/web/node_modules/
+/apps/web/playwright-report/
+/apps/web/test-results/
+/apps/web/data/
+*.db
+*.db-shm
+*.db-wal
+.env.local
