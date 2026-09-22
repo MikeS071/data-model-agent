@@ -1,0 +1,6 @@
+interface:
+  display_name: "UI/UX Pro Max"
+  short_description: "Design and review visual, interactive UI work"
+  default_prompt: "Use $ui-ux-pro-max for this visual or interactive UI/UX task, while preserving the accepted project scope and policy."
+policy:
+  allow_implicit_invocation: true

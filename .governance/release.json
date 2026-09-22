@@ -26,7 +26,12 @@
     },
     {
       "path": ".agents/skills/dev-stack-project-initialisation/SKILL.md",
-      "sha256": "e0c681927355cd5e61f8c419e322ee14ef28fc7d9895d080674caecbbe2537bd",
+      "sha256": "624c0295fca79ac81e573b5bce4de81c18a862097f9357626a0834caae8facd8",
+      "mode": 420
+    },
+    {
+      "path": ".agents/skills/dev-stack-project-initialisation/agents/openai.yaml",
+      "sha256": "eb0a470afaa2aad8fec72298b184295b553061b49e8ade179be0460c069e1a32",
       "mode": 420
     },
     {
@@ -50,6 +55,16 @@
       "mode": 420
     },
     {
+      "path": ".agents/skills/ui-ux-pro-max/SKILL.md",
+      "sha256": "6508ee278cfb17bc6127ca223926355e8cfa71849c6ad0f5e6229cd90ef91cd8",
+      "mode": 420
+    },
+    {
+      "path": ".agents/skills/ui-ux-pro-max/agents/openai.yaml",
+      "sha256": "2d7a44d7a35cbee578c4dcd11e740b0a14c17a6680a7aab1cb63ca329eeee953",
+      "mode": 420
+    },
+    {
       "path": ".governance/LICENSE.third-party",
       "sha256": "bc957ca6bee02792566a1a028d105e02e247c6e77cf057061674273da77b200e",
       "mode": 420
@@ -66,7 +81,7 @@
     },
     {
       "path": ".governance/build-release.py",
-      "sha256": "514f13d4bce69742ba7405c63ab7f8f5c2632059707bff4a5cf5d452a00db4fd",
+      "sha256": "4b6b5e276b0046bee7daaaf5593ae367a14723b73a8f89965d753d18198136f3",
       "mode": 420
     },
     {
@@ -136,7 +151,7 @@
     },
     {
       "path": ".governance/core/verification.mjs",
-      "sha256": "659894369c916e5411ab139c0b5320aa051aac83549f2b327cea49c9877cd6b1",
+      "sha256": "9a6769c15399a8abbe1f31cf2677c650d2697a653e47fef155ba68a06a2f5415",
       "mode": 420
     },
     {
@@ -146,12 +161,17 @@
     },
     {
       "path": ".governance/docs/architecture.md",
-      "sha256": "5ffe1e6935f5c4d425b51030fb6172a9eec4330d387e0488e2f69d5fca8d2491",
+      "sha256": "7e492b72b4628ccdee371f1ad0780e33248db3d212baabe56ef09ba8864d0285",
       "mode": 420
     },
     {
       "path": ".governance/docs/changelog.md",
-      "sha256": "14b9a7946a82f78e7a36c96e7f3f49f022053a7071080a281b6365ba5df269ca",
+      "sha256": "46a7a7df659761180e4555c1c1902b826ba788df1b1cbbea9cf656ef773d84da",
+      "mode": 420
+    },
+    {
+      "path": ".governance/docs/initialise-prompt.md",
+      "sha256": "362ad1e248daa19e147b456b12c7e79a87cc222cadbd6afb31549703069ed86f",
       "mode": 420
     },
     {
@@ -161,7 +181,7 @@
     },
     {
       "path": ".governance/docs/quickstart.md",
-      "sha256": "1a0579ff3c3b0b087eaa7b7de36e1cb8820ef230aac7c74ad14b20d995944f37",
+      "sha256": "5f375ac47afb48f9080f08044bb9576889aa08a51f73586b608e43e7d430d3aa",
       "mode": 420
     },
     {
@@ -176,7 +196,7 @@
     },
     {
       "path": ".governance/docs/reference.md",
-      "sha256": "465239695116404e1717f86fbf890b943659cee6ac097c026f8978be656408ae",
+      "sha256": "2c9f9a355beb8bee72e223b0a5768ca7eeb56c3a4b6c919393d0ef740b3cd7d0",
       "mode": 420
     },
     {
@@ -216,7 +236,7 @@
     },
     {
       "path": ".governance/release-inputs.json",
-      "sha256": "cdf33609fc7aa9c3cea0ce0ca72ca3872b7b611371533774d490b5b61ad6200d",
+      "sha256": "b91f5f5ee181aef4d52f67d926268d15243fe546e41f171d9443c7c8aaa1be78",
       "mode": 420
     },
     {
@@ -361,7 +381,7 @@
     },
     {
       "path": ".governance/skills/project-initialisation/SKILL.md",
-      "sha256": "5b032f07b06f0f255bf069828ea7d1df9a855132afb50b93c68fb8eae0c8a90c",
+      "sha256": "12b500d5e29fa78b116c5130d581ad152695d154998a8840f9e8ce04e4694c97",
       "mode": 420
     },
     {
@@ -375,8 +395,253 @@
       "mode": 420
     },
     {
+      "path": ".governance/skills/ui-ux-pro-max/LICENSE.upstream",
+      "sha256": "738f69dfa83db5c347c678fb9d90e560877059f0de93a327c39001bff92dc014",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/SKILL.md",
+      "sha256": "fe4b114c002c19c6c572e0e105a44ea3e3bef341d899ba58d8f9b220ffb82f5f",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/UPSTREAM.md",
+      "sha256": "b53b1ae5b0d897893f26210914ba19f0046baef37b956836df1ca7a31bd8280a",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/app-interface.csv",
+      "sha256": "331e7cf2c0b222d80c566c5f255c63cb339f65bfd02e471a720f28e4864a9f08",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/catalog-summary.json",
+      "sha256": "6638da97231c07fb5cef3cd9d3ce483ca7b2f9748980f8c27490eb03968d8894",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/charts.csv",
+      "sha256": "4115cf1120680f2cedef0676cb648f30c7ef4699e2a947535d4113e71ed3b12a",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/colors.csv",
+      "sha256": "8162429222bce22df62b564085946a30d07cc9722c58d0a3a494bd0d1d00841c",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/data-provenance.json",
+      "sha256": "e82fb33ed49375a300e93d9c11ccd1c1493c999e84ee7ee295e527634786e2e0",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/google-font-licenses.json",
+      "sha256": "35688523f2955795caa1a47c53b83099e60c1708461476f9cc3a050cf3b0148a",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/google-fonts.csv",
+      "sha256": "1c8c3b2ea1faf6a1012da463756def8b3889db33f2226f0343bb4daa80307d03",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/icons.csv",
+      "sha256": "50816c6012030178195a16ee481ebf58b47bd985d70e8ec58886cc83f6eddafc",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/landing.csv",
+      "sha256": "9a2edd3bb676c2a58f00ade7a062e285222d4297bfd847c8d5b056f0dbbf52d0",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/motion.csv",
+      "sha256": "381affe8df8ea1f66fbbda2598827f9f54299107bbe6a1b4e9b68f6b62091ceb",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/phosphor-icons-upstream.json",
+      "sha256": "2399325233b277b5c97a80e6a5e8941154f5d057beee4e7613db87c87d700236",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/products.csv",
+      "sha256": "42473f75e8dde5987bdf89ce55d8c168091b80a356cae691dd60247d80720b70",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/react-performance.csv",
+      "sha256": "3d925802539abac5afeb63ae8aa1960b7229ad271b3a47caed40ab2d97ad0734",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/angular.csv",
+      "sha256": "704be83f2bad30c7e6de01afb113ffa01e0c458762f48b7102f31ba2367b5553",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/astro.csv",
+      "sha256": "2c2f55fadaafc05e04cc321c8194a1a28b656e6757fe2ba316f41b16428299c6",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/avalonia.csv",
+      "sha256": "442fca14675a020683473e7e49f08abb27b9df0765c80efe54aef61f1a4ac258",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/flutter.csv",
+      "sha256": "64dba0ac17349f28bce517a0f5f48c54d9ed2e487ec0c0258303463b382f41a0",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/html-tailwind.csv",
+      "sha256": "d05a581d20af57b8ca0104a6d31d90a07c437d500662a96c3029fc2f9a4678ee",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/javafx.csv",
+      "sha256": "2e819b8d5abdd23ad4dae0991650fdb57af497aabd68b37463aa9c442944c869",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/jetpack-compose.csv",
+      "sha256": "699de218b286948eaec7d15767b6e1350ee299167e49bf476d82e3ff58724e0a",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/laravel.csv",
+      "sha256": "854ea4daa5fc61292d22235ad33b49ba3fe22423c3de8d3cb03758ffed3b59f9",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/nextjs.csv",
+      "sha256": "ecd2c27b2ea0127d203ae726060efcdd7335b5e83f96b99e4f3befbbfeebd5a4",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/nuxt-ui.csv",
+      "sha256": "fce682a338cfcdbf35d318d20e5befbe7b5d81b05abc37f87677a6d9cde84dc6",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/nuxtjs.csv",
+      "sha256": "3d9b54ed2d151bd9c86e9e5609b8a6f88a00c4c52fa601a30af96c49b2c4d176",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/react-native.csv",
+      "sha256": "ba31dd9c0c04da6bc02a74448bf121f9c0728ae5ba3b4d47b487778b0a1135b5",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/react.csv",
+      "sha256": "4dd176a9787e5c6306b5df94158d75955adcdc6edab41ce5286641a5842303c1",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/shadcn.csv",
+      "sha256": "e56cfde5b74907836ac3582a4779d5b7f3d206a702ab81b8669a1b668c3eeb51",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/svelte.csv",
+      "sha256": "f6e379ba802941ba26b01d4ffbe3cd39120f2587659a1d93851c707f66bc13db",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/swiftui.csv",
+      "sha256": "bdd9231ff3ad658f4e7c063e1eb49df2fd09ac8d90631a86df899b39833b9623",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/threejs.csv",
+      "sha256": "97542e0ba34915a0ff7578be20e1619495df47c95c8c1c39b83e3785e1de771f",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/uno.csv",
+      "sha256": "a0474363e4225b5367214d5675fd3e075f137026f9500f0d04357882ef4f6d48",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/uwp.csv",
+      "sha256": "c409f08c1fbba1f1029f1acaa554e7b4471cc85517a5751c9f2e62465badcd5c",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/vue.csv",
+      "sha256": "b655f1ebb9dff2652d15981f31b1784c8a6d4759efd2815a14f3088257569f95",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/winui.csv",
+      "sha256": "e676dc1c13ee6c205c40b0746f1335150a346c7a49a0616d2545bc3d2c930c85",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/stacks/wpf.csv",
+      "sha256": "9781a9950b20333637b30a02e498b7efca21b618a3eeb8665836f3ac6e974da7",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/styles.csv",
+      "sha256": "a93a4d9d7025856575d7b7583bda020be9043013432c5af7c58af9dbdfb206b7",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/typography.csv",
+      "sha256": "321fc446e89024488ebae96dda93efc4d2307bd8bddb240857ad51364f6782c8",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/ui-reasoning.csv",
+      "sha256": "f0774dd741cecdad5eec842034bd6d5e9ea50e9f220a1910069748daa0bb8e9a",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/data/ux-guidelines.csv",
+      "sha256": "ff81ec613f70ba9fc3fcce52dbe4ae35d44b2079dbe6dc066d2d6e38c28facd5",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/references/pro-rules.md",
+      "sha256": "d28442d61c310b49c054a4ea736f89fb3008beebdbbc38c4b3a540b8f7fadf23",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/references/quick-reference.md",
+      "sha256": "0609bc7c89dacb40472465d8fc14257b56b2c43439660fc8d6fa3b8c022e1876",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/scripts/core.py",
+      "sha256": "c3be4b23e7150e6b45095213158cfa3c8ad96502f01dde3f6ffff9de64a4f481",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/scripts/design_system.py",
+      "sha256": "6a94743c3362c9c7e6d1450b94f4014d9ea752e7b4e151f6f0bdb217e0544bf7",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/scripts/reasoning_contract.py",
+      "sha256": "b8bac1af82aa280d3e06f00aabaeac4337e632996b07fed874e2b6ee6e9c5913",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/scripts/search.py",
+      "sha256": "d54e648fe0ec2932cac66684220cc17be4bd4b4eba1d23d3195d509d398db374",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/ui-ux-pro-max/scripts/validate_data.py",
+      "sha256": "a599aa256049cf30954d1f164721b99e453eb7e4cb8241bcab2d5573e6cf58b8",
+      "mode": 420
+    },
+    {
       "path": ".governance/skills/verification/SKILL.md",
-      "sha256": "fa9a1266c5dfbcbacdc728678f37cd7e16e1e8e99872aa435582869d9ce85e42",
+      "sha256": "69025ae79d2237c7c0c131c97e4281bdf35abd3fff080ab6cfbc0994c1f0f8b8",
       "mode": 420
     },
     {
@@ -441,7 +706,7 @@
     },
     {
       "path": ".governance/tests/review.test.mjs",
-      "sha256": "9004ceb8b3a45cc5cabe6a8b3f10c60d69e59501ea5745a996d13ca9bbd225e5",
+      "sha256": "468dc0636121183a839c3303a98f21ddeb277a98aa8e9007897441a007641336",
       "mode": 420
     },
     {
@@ -451,7 +716,12 @@
     },
     {
       "path": ".governance/tests/test_install.py",
-      "sha256": "d5fb795998965768cdde762914f72783b700cb9cbd19246e096357dd6473aa97",
+      "sha256": "8dff1af1464b7a64bacbbea0ff2f4cf3d65e0972ae70f4cc392d24a6ff27610e",
+      "mode": 420
+    },
+    {
+      "path": ".governance/tests/ui_skill.test.mjs",
+      "sha256": "21ed7f19f0f57b2ab552db0f4985998be1e3a09831d6c460476a82a7669522fa",
       "mode": 420
     },
     {

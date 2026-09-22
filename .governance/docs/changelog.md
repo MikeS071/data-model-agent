@@ -20,6 +20,12 @@ supports one-material-question-at-a-time intake for both human request and desig
 Simplifies normal lifecycle use by retaining release, adapter, plan and Git identities in
 private machine-validated artifacts. Install/upgrade now use plan then apply without copied
 digests, and `scope create` captures the current branch/commit from accepted project docs.
+Configured verification now runs against the current clean descendant candidate while
+keeping the accepted scope source frozen as the pre-implementation baseline.
+Adds a copyable Codex new-project prompt plus selectable project-initialisation metadata
+for one-critical-question-at-a-time foundation intake. Adds an attributed, pinned local
+copy of UI/UX Pro Max 2.13.0 with Codex selection metadata and UI-only routing; backend,
+API, database, infrastructure and other non-visual work are explicitly excluded.
 
 ## 0.1.0-candidate.1
 

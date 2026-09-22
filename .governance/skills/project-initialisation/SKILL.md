@@ -1,9 +1,37 @@
 ---
 name: project-initialisation
-description: Install, inspect, verify, upgrade, recover, rollback or remove an explicitly selected pinned dev-stack release in a project.
+description: Create or initialise a new project with dev-stack, or inspect, install, verify, upgrade, recover, rollback or remove an explicitly selected pinned release.
 ---
 
 # Project initialisation and lifecycle
+
+## New or empty project
+
+Start by inspecting the selected directory, Git state, existing instructions and files;
+an empty directory is not permission to invent repository identity or overwrite nearby
+work. Ask one critical unanswered question at a time. Stop when the following technical
+foundation is reviewable, skipping facts the user already supplied:
+
+1. project name, purpose, users and first observable outcome;
+2. local-only or hosted repository identity, base branch and allowed work prefixes;
+3. application shape, language/runtime, framework and package manager;
+4. verification commands or the honest plan for adding them;
+5. storage, external services, sensitive-data and deployment boundaries; and
+6. whether the feature includes visual/interactive UI work.
+
+Summarize the answers, assumptions, unresolved decisions, intended files and commands in
+a readable plan before writing. A human does not provide release digests or Git commit
+identifiers. Do not invent a GitHub owner, remote, provider, credential or deployment
+target. Initialise Git, create application scaffolding, install dependencies or configure
+external services only when those actions are in the user's authorized scope. Existing
+files and stronger policy remain authoritative.
+
+The governance installation and the application feature are distinct. Install the
+reviewed dev-stack release using the lifecycle below, then use the two request/design
+gates for application scaffolding or feature implementation. If the accepted work has a
+visual or interactive interface, select `$ui-ux-pro-max` during design and UI work. Never
+select that skill for backend, API, data-model, database, infrastructure or other
+non-visual work.
 
 Inspect existing project policy, target ownership, native skill entrypoints and actual
 required tools. Obtain the exact reviewed release through the approved channel; read

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { digest, validateScope } from './scope.mjs';
 import { git } from './actions.mjs';
-import { inspectBaseline } from './baseline.mjs';
+import { inspectProject } from './project.mjs';
 
 export function inspectVerification(config) {
   assert.deepEqual(Object.keys(config).sort(), ['commands', 'schemaVersion']);
@@ -38,13 +38,21 @@ export function verificationPlan({ cwd, base, head, scope }) {
 // Explicit invocation requires the lead's ordinary scoped execution authority.
 // Commands come from the reviewed commit, never from an action/worker response.
 export function runVerification({ cwd, scope, project, check }) {
-  const baseline = inspectBaseline({ cwd, scope, project });
-  assert.equal(baseline.dirty, false, 'Verification requires a clean source');
-  const config = readConfig(baseline.checkout, scope.source.sha);
+  validateScope(scope);
+  const { repository, branchPrefixes } = inspectProject(project);
+  const checkout = git(cwd, 'rev-parse', '--show-toplevel');
+  const remote = git(checkout, 'remote', 'get-url', 'origin');
+  assert.ok([`https://github.com/${repository}`, `https://github.com/${repository}.git`, `git@github.com:${repository}`, `git@github.com:${repository}.git`].includes(remote), 'Repository mismatch');
+  const source = { ref: git(checkout, 'branch', '--show-current'), sha: git(checkout, 'rev-parse', 'HEAD') };
+  assert.equal(source.ref, scope.source.ref, 'Verification requires the accepted scope branch');
+  assert.ok(branchPrefixes.includes(source.ref.split('/')[0]), 'Verification requires an allowed branch');
+  assert.equal(git(checkout, 'status', '--porcelain', '--untracked-files=normal'), '', 'Verification requires a clean candidate');
+  assert.doesNotThrow(() => git(checkout, 'merge-base', '--is-ancestor', scope.source.sha, source.sha), 'Accepted scope source must be an ancestor of the candidate');
+  const config = readConfig(checkout, source.sha);
   assert.ok(Object.hasOwn(config.commands, check), 'Unsupported check');
   const [program, ...args] = config.commands[check];
-  const run = spawnSync(program, args, { cwd: baseline.checkout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 8000000 });
-  return { code: !run.error && run.status === 0 ? 0 : 1, check, source: baseline.source, configDigest: digest(config),
+  const run = spawnSync(program, args, { cwd: checkout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 8000000 });
+  return { code: !run.error && run.status === 0 ? 0 : 1, check, source, configDigest: digest(config),
     exit: run.error ? null : run.status, outputRetained: false,
     acceptance: 'unverified; command success cannot establish every criterion or complete intent' };
 }

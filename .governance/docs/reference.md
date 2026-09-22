@@ -5,6 +5,14 @@ entrypoints. Root AGENTS/.gitignore receive marked managed sections; their other
 remain project-owned. No application files, package.json, CI, user settings or hooks
 are overwritten by the installer. Unknown files are not installer-owned.
 
+`docs/initialise-prompt.md` is the copyable Codex entrypoint for a new or empty project.
+The native `dev-stack-project-initialisation` metadata exposes the same workflow as a
+selectable skill. The `ui-ux-pro-max` router is selectable and may be discovered
+implicitly only for visual or interactive UI/UX work; its description expressly excludes
+backend, API, database, infrastructure and other non-visual tasks. Its local catalog and
+Python scripts are installed under `.governance/skills/ui-ux-pro-max/`, with the reviewed
+upstream version, commit and MIT license recorded alongside them.
+
 `project.json`: schemaVersion=1, repository=`owner/name`, allowed branchPrefixes.
 `delivery.json`: schemaVersion=1, project, baseBranch, queue (positive issue number or
 null), instructionPaths, and issue/pr template paths. The packaged adapters include root
@@ -15,6 +23,9 @@ Supported explicit programs: node, python3, git, pnpm, npm, go, cargo. Installat
 Node/Python/Git; other configured tools must already exist when invoked. Commands are
 reviewed project code and can have side effects: scope authority remains necessary.
 No downloaded shell commands or worker-supplied checks are evaluated.
+`verify run` reads this allowlist from the current clean candidate, not the earlier scope
+commit. It requires the same accepted scope branch, an allowed branch prefix and the
+scope source as a Git ancestor, then records the candidate source automatically.
 
 `self-verification.json`: schemaVersion=1 plus positive `maxIterations`,
 `maxSameFailure` and `maxElapsedMinutes`. `loop inspect` accepts a scope, this policy,

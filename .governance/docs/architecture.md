@@ -34,6 +34,12 @@ test oracles return to human acceptance. Environment failures remain separate fr
 failures. Blocked work waits for human input. Only complete criterion and intent evidence
 can route to reporting.
 
+Configured verification runs against the current clean candidate on the accepted scope
+branch. The accepted scope source must be an ancestor, but it remains the frozen design
+baseline rather than being rewritten as implementation advances. Verification commands
+come from the candidate commit, allowing an accepted feature to introduce its own reviewed
+project checks without rebinding the human scope.
+
 Iteration, elapsed-time and repeated-failure limits prevent optimistic infinite repair.
 The verifier should be distinct from the implementer when an authorized independent agent,
 session or CI boundary exists. The record never proves its own evidence and never grants

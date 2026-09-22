@@ -27,6 +27,21 @@ captures and rechecks release identity internally between plan and apply. Ordina
 do not need to read, copy or provide machine identifiers; distribution maintainers can
 add stronger external pinning without changing this workflow.
 
+## Start in an empty directory with Codex
+
+Open Codex in the directory you want to initialise and paste the
+[project initialisation prompt](initialise-prompt.md). It tells Codex where the reviewed
+dev-stack release lives, asks one critical unanswered question at a time, and produces a
+readable foundation/install plan before writing. The selectable
+`$dev-stack-project-initialisation` skill provides the same workflow when Codex can
+discover the release's native skills.
+
+Project initialisation establishes the repository and governance foundation; it does not
+silently authorize the first application feature. That feature still passes the separate
+request and design gates below. If it includes a visual or interactive interface, Codex
+can select `$ui-ux-pro-max` for that UI portion only. Backend, API, database,
+infrastructure and other non-visual work must not route through the UI skill.
+
 ## The files to know
 
 For day-to-day use, start with **`AGENTS.md`**. It is the instruction entrypoint for the
@@ -46,6 +61,8 @@ outside that block remain yours.
 | `.governance/quality.md` | Reusable code-quality review conditions. | Pinned dev-stack release. |
 | `.governance/principles.md` | Router for conditional engineering-principle skills. | Pinned dev-stack release. |
 | `.governance/self-verification.json` | Maximum iterations, repeated failures and elapsed time for a loop. | Pinned dev-stack release. |
+| `.governance/docs/initialise-prompt.md` | Copyable Codex prompt for a new or empty project. | Pinned dev-stack release. |
+| `.governance/skills/ui-ux-pro-max/` | Optional, attributed local design intelligence for UI work only. | Pinned third-party skill plus dev-stack routing adaptation. |
 
 The request/design pair is the most important feature record: the request says what
 “done” means, while the design says how the system will safely achieve it. A passing
@@ -405,6 +422,9 @@ accepted request + accepted design + generated scope
 Each iteration is bound to the branch, commit and dirty-patch proof. The limits in
 `.governance/self-verification.json` stop infinite repair. Tests may implement accepted
 criteria, but the agent may not weaken criteria or tests merely to obtain green output.
+`verify run` automatically selects the current clean candidate on the accepted branch and
+requires the accepted design commit to remain in its history, so the human does not
+provide or update a commit identifier after implementation.
 Where possible, a different authorized agent/session or CI boundary performs the final
 verification. If that is unavailable, the report must disclose the limitation and retain
 human or CI review as the independent gate.
@@ -435,6 +455,14 @@ For later work, use the same short sequence:
 6. Invoke `dev-stack-self-verifying-delivery`.
 7. Review the final source-bound report, then separately approve any PR, merge, release,
    deployment, provider or worker action.
+
+For visual or interactive UI work, select `$ui-ux-pro-max` after the accepted request
+establishes that UI is in scope. Use its project-local searches to inform the design and
+implementation, then verify the result against the accepted criteria and actual rendered
+interface. Its recommendations never override the request, design, accessibility needs,
+repository policy or user decisions. Do not select it for a data model merely because the
+model can be rendered as Mermaid; select it only when the user-facing interface itself is
+being designed, built, reviewed or fixed.
 
 If GitHub issue/PR actions will be used, start from the installed issue template and use
 an `intentSource` such as `issue:42`. The reviewed `action plan`/`action apply` flow can

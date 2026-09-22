@@ -43,9 +43,13 @@ test('committed review binds local policy/full leaves and real behavior without 
     assert.equal(inspectReview(plan, missing, scope).ready, false);
     missing.intentProof = proof; missing.conditions = missing.conditions.filter(x => x.id !== 'principle:project-policy');
     assert.equal(inspectReview(plan, missing, scope).ready, false);
-    const passed = runVerification({ cwd, scope: { ...scope, source: { ...scope.source, sha: head } }, project: delivery.project, check: 'value' });
+    const passed = runVerification({ cwd, scope, project: delivery.project, check: 'value' });
     assert.deepEqual([passed.code, passed.exit, passed.outputRetained], [0, 0, false]); assert.match(passed.acceptance, /^unverified/u);
-    assert.throws(() => runVerification({ cwd, scope: { ...scope, source: { ...scope.source, sha: head } }, project: delivery.project, check: 'unknown' }));
+    assert.deepEqual(passed.source, { ref: 'feature/7-small', sha: head });
+    assert.throws(() => runVerification({ cwd, scope, project: delivery.project, check: 'unknown' }));
+    writeFileSync(join(cwd, 'value.cjs'), 'module.exports = 3;\n');
+    assert.throws(() => runVerification({ cwd, scope, project: delivery.project, check: 'value' }));
+    writeFileSync(join(cwd, 'value.cjs'), 'module.exports = 2;\n');
     mkdirSync(join(cwd, '.governance-artifacts'));
     writeFileSync(join(cwd, '.governance-artifacts/usage.json'), JSON.stringify({ version: 1, scopeDigest: digest(scope), complete: false, entries: [] }));
     const packet = reviewBundle(context(cwd, delivery), scope, { head, base, staging: base, output: '.governance-artifacts/review.json' }, { context: ['value.cjs'], principles: ['principle-prove-it-works'.replace('principle-', 'principle:')], checks: [{ name: 'value', criteria: ['VALUE'] }], ledger: '.governance-artifacts/usage.json', reasoning: { effort: 'medium', reason: null } });
