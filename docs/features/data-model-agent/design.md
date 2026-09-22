@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 1
+revision: 2
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -39,6 +39,16 @@ pure renderers derive Mermaid ER and draw.io XML from the same canonical model. 
 provides structured entity, attribute, rule and relationship forms; canonical JSON is
 read-only diagnostic output. Mermaid and draw.io previews are read-only, while downloads
 contain the generated source formats.
+
+Use the project-local UI/UX Pro Max output in
+`design-system/data-model-agent/MASTER.md` as the visual interaction contract. Present the
+application as a calm, data-dense enterprise workbench rather than a marketing page. A
+compact product header exposes local-pilot and save state. Desktop uses model navigation,
+a focused editing canvas and a nearby preview/review rail; smaller screens stack those
+regions without horizontal page scroll. Entity details use accessible progressive
+disclosure so a large model remains scannable, while relationships, rules, preview,
+downloads and version history remain discoverable. Semantic colors, persistent labels,
+native controls, visible focus, live status and reduced-motion behavior are required.
 
 ## Alternatives considered
 
@@ -222,8 +232,11 @@ of scope.
 | D-010 | Bind the unauthenticated pilot locally and make no shared-service claim. | Single-user scope does not justify an authorization system. | Add authentication now. | Network deployment requires a new accepted design. |
 | D-011 | Require the OpenAI model to be an environment setting. | Model choice can change without source edits. | Hard-code a model. | Startup must report missing configuration clearly. |
 | D-012 | Store generated representations with each immutable version. | Reopened versions retain the exact reviewed outputs. | Regenerate every historical view. | Version storage is larger but deterministic review is simpler. |
+| D-013 | Use a responsive three-zone enterprise workbench with progressive entity disclosure and a persistent preview rail. | It keeps dense modelling tasks scannable and puts model feedback beside the edit that causes it. | Marketing hero with a single long form; separate editor and preview pages. | The layout stacks at narrower widths and UI tests must cover disclosure, focus, feedback and responsive behavior. |
 
 ## Approval
 
 Status: accepted. Michal explicitly accepted design revision 1 for request revision 1
-after the guided architecture review.
+after the guided architecture review, then directly authorized applying the installed
+UI/UX design skill to redesign the pilot workbench. That instruction accepts revision 2's
+visual and interaction decision without changing request intent or acceptance criteria.
