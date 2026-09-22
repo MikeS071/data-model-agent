@@ -22,8 +22,10 @@
   "verification": {
     "schemaVersion": 1,
     "commands": {
-      "syntax": ["node", "--check", "src/index.mjs"],
-      "unit": ["node", "--test", "test/model.test.mjs"]
+      "typecheck": ["pnpm", "--dir", "apps/web", "exec", "tsc", "--noEmit"],
+      "unit": ["pnpm", "--dir", "apps/web", "test"],
+      "build": ["pnpm", "--dir", "apps/web", "build"],
+      "browser": ["pnpm", "--dir", "apps/web", "test:e2e"]
     }
   }
 }
