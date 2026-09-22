@@ -78,6 +78,12 @@ on color alone.
 - Use `aria-live` for save/generation state. Error alerts remain inline and keyboard
   discoverable.
 - Segmented preview controls expose `aria-pressed`.
+- Mermaid and draw.io share one clipped interactive canvas. Wheel input zooms around the
+  pointer and primary mouse-button drag pans the model; bound zoom to a useful range and show a
+  compact percentage, zoom-in, zoom-out and reset toolbar. The canvas is focusable and
+  supports arrow-key panning plus `+`, `-` and `0` so drag is never the only interaction.
+- Use a `grab` cursor at rest and `grabbing` while panning, suppress text selection during
+  a drag, and reset the viewport when the representation changes.
 - Hover and focus transitions use 150–200ms. Never move layout on hover.
 
 ## Motion
@@ -96,3 +102,5 @@ transitions effectively immediate.
 - [ ] Primary, warning, error and selected states remain distinguishable without color.
 - [ ] Empty, loading, disabled, success and failure states are visible.
 - [ ] Mermaid, draw.io, versioning, downloads and canonical JSON remain accessible.
+- [ ] Visualization zoom/pan works with mouse, controls and keyboard without moving the
+  surrounding page or creating page-level overflow.

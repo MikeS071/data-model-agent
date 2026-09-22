@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 6
+revision: 7
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -69,7 +69,11 @@ disclosure so a large model remains scannable, while relationships, rules, previ
 downloads and version history remain discoverable. Semantic colors, persistent labels,
 native controls, visible focus, live status and reduced-motion behavior are required.
 All buttons share one font family, weight, sizing rhythm, radius and focus treatment;
-semantic variants change color without changing their typographic character.
+semantic variants change color without changing their typographic character. Both model
+representations use one interactive canvas: a mouse wheel zooms around the pointer,
+primary mouse-button dragging pans the model, and visible zoom/reset controls plus
+focusable arrow and zoom keys provide non-drag alternatives. Switching representation
+resets the viewport so an off-screen pan cannot make the next model appear empty.
 
 ## Alternatives considered
 
@@ -250,11 +254,12 @@ Repository integration tests use a temporary SQLite database to prove source ret
 pre-generation update and delete, atomic chat-turn persistence, autosave, transactional
 immutable versions, list, reopen and continue-from-version.
 Renderer tests parse Mermaid semantics and draw.io XML and compare both with the same
-canonical fixture. Component tests exercise structured editing and read-only diagnostic
-views. A browser test covers create, generate draft, answer clarification, edit, autosave,
-save version, reopen, preview and download. The configured project unit and production
-build commands run on the exact candidate. Final verification maps independent evidence
-to every request criterion and to the complete intent without a live OpenAI call.
+canonical fixture. Component tests exercise structured editing, read-only diagnostic
+views and the accessible zoom controls. A browser test covers create, generate draft,
+mouse-wheel zoom, drag pan, keyboard/reset alternatives, answer clarification, edit,
+autosave, save version, reopen, preview and download. The configured project unit and
+production build commands run on the exact candidate. Final verification maps independent
+evidence to every request criterion and to the complete intent without a live OpenAI call.
 
 ## Rollout and rollback
 
@@ -291,6 +296,7 @@ of scope.
 | D-015 | Treat project intake as a saved lifecycle stage before provider generation, with editable inputs and confirmed project deletion. | A provider failure must not trap a saved project in a read-only retry screen, and users need to prepare work without making a provider call. | Create projects only as a side effect of Generate; require database cleanup for abandoned projects. | The API supports update and delete, deletes cascade transactionally, and the UI distinguishes Save model from Generate draft. |
 | D-016 | Keep a persistent project chat beside the structured model editor and apply only complete, validated LLM revisions. | Users need a conversational way to evolve a built model while seeing the resulting source of truth. | Hide chat on a separate page; apply unvalidated JSON patches; keep chat ephemeral. | Chat turns and revised drafts commit atomically, recent context is bounded, and responsive layouts stack the same two surfaces on narrow screens. |
 | D-017 | Make live output and chat the top collaboration row, handle clarification as a chat workflow, place the structured editor below, and leave assumptions and warnings until the bottom review section. | The user should see the model change beside the conversation driving it, while detailed editing and residual review information follow the main task flow. | Keep a separate clarification form; lead with assumptions and warnings; retain the editor-plus-preview-rail layout. | Chat requests include the pending question, successful answers update the complete validated draft, keyboard order follows visual order, and narrow screens stack output, chat, editor, history and review in that sequence. All buttons use one typographic and sizing system. |
+| D-018 | Wrap Mermaid and draw.io in one bounded interactive canvas with pointer-centred wheel zoom, drag panning, visible zoom/reset buttons and keyboard equivalents. | Large insurance models must remain inspectable without page-level overflow, while dragging cannot be the only way to navigate. | Keep scrollbars only; add interaction to just one representation; depend on a diagramming library. | Both formats share identical viewport behavior, scale is bounded, mode changes reset the view, controls have accessible names, and browser tests exercise real mouse and keyboard input. |
 
 ## Approval
 
@@ -313,3 +319,7 @@ structured editor below them, moved assumptions and warnings to the bottom, and 
 next clarification part of chat. The same request requires a polished interface and a
 consistent button type system. That direct interaction decision accepts revision 6 and
 D-017 without changing the modelling intent or provider trust boundary.
+Michal then explicitly required the model visualisation to zoom and move with a mouse.
+That direct interaction decision accepts revision 7 and D-018. Accessible buttons and
+keyboard navigation are required alternatives to the mouse gestures and do not expand
+the modelling or provider scope.
