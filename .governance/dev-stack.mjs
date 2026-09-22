@@ -2,7 +2,8 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { parseArgs } from 'node:util';
-import { bindScope, digest, validateScope } from './core/scope.mjs';
+import { digest, validateScope } from './core/scope.mjs';
+import { bindDocuments } from './core/specification.mjs';
 import { inspectConfig, inspectResult } from './core/contracts.mjs';
 import { context, adapter, applyPlan, git, projectFile, receiptFile, withApplyLock } from './core/actions.mjs';
 import { makePlan, GovernanceError } from './core/plan.mjs';
@@ -25,7 +26,7 @@ const routes = {
   'action plan': ['scope', 'request', 'delivery'],
   'action apply': ['scope', 'request', 'delivery', 'plan'],
   'baseline': ['scope', 'project'],
-  'scope create': ['request', 'output'],
+  'scope create': ['request', 'design', 'output'],
   'scope validate': ['scope'],
   'config validate': ['config'],
   'result inspect': ['scope', 'record', 'project', 'head'],
@@ -40,7 +41,7 @@ try {
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--help') {
     console.log('Usage: node dev-stack.mjs COMMAND OPTIONS\n' + Object.entries(routes).map(([name, flags]) => `  ${name} ${flags.map(x => `--${x} VALUE`).join(' ')}`).join('\n') +
-      '\nJSON file arguments stay inside the current directory. Baseline observes its enclosing Git repository. Action plan reads GitHub; action apply writes only the reviewed plan and local receipts. --head is a lead-observed source, not verified by this inspector. Exit 0 means valid inspection, never authority or proof a workload succeeded; inspect acceptedScope/outcomeCode. No dispatch, merge, installation or provider provisioning.');
+      '\nInput files stay inside the current directory. Scope creation requires accepted committed request/design Markdown; other records are JSON. Baseline observes its enclosing Git repository. Action plan reads GitHub; action apply writes only the reviewed plan and local receipts. --head is a lead-observed source, not verified by this inspector. Exit 0 means valid inspection, never authority or proof a workload succeeded; inspect acceptedScope/outcomeCode. No dispatch, merge, installation or provider provisioning.');
   } else {
     const command = args[0] === 'baseline' ? 'baseline' : args.slice(0, 2).join(' '), flags = routes[command];
     if (!flags) throw new Error('invalid-command');
@@ -82,13 +83,16 @@ try {
     else if (command === 'baseline') { result = inspectBaseline({ cwd: process.cwd(), scope: read(values.scope), project: read(values.project) }); code = 2; }
     else if (command === 'scope create') {
       const root = realpathSync(process.cwd());
-      const scope = bindScope(read(values.request), { ref: git(root, 'branch', '--show-current'), sha: git(root, 'rev-parse', 'HEAD') });
+      const scope = bindDocuments({ root, requestPath: values.request, designPath: values.design });
       const saved = artifact(root, values.output, scope);
-      result = { artifact: saved.path, state: 'scope-created', source: 'captured-from-current-checkout' };
+      result = { artifact: saved.path, state: 'scope-created', slug: scope.documents.slug,
+        requestRevision: scope.documents.request.revision, designRevision: scope.documents.design.revision,
+        source: 'captured-from-current-checkout' };
     }
     else if (command === 'scope validate') {
       const scope = read(values.scope); validateScope(scope);
-      result = { state: 'scope-valid', revision: scope.revision, criteria: scope.criteria.length, authority: 'shape-only' };
+      result = { state: 'scope-valid', slug: scope.documents.slug, requestRevision: scope.documents.request.revision,
+        designRevision: scope.documents.design.revision, criteria: scope.criteria.length, authority: 'shape-only' };
     }
     else if (command === 'config validate') { result = inspectConfig(read(values.config)); code = result.state === 'blocked' ? 2 : 0; }
     else if (command === 'loop inspect') {

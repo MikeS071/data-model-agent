@@ -94,7 +94,7 @@ export function inspectLoop({ scope, policy, record, currentRef, currentHead, cu
   }
   let route = 'build', stopReason = null;
   if (latest?.outcome === 'SCOPE_VERIFIED') route = 'report';
-  else if (latest?.outcome === 'SCOPE_GAP') route = 'human-scope-review';
+  else if (latest?.outcome === 'SCOPE_GAP') route = 'human-design-review';
   else if (latest?.outcome === 'TEST_ORACLE_INVALID') route = 'human-acceptance-review';
   else if (latest?.outcome === 'BLOCKED') route = 'human-input';
   else if (iteration >= policy.maxIterations) { route = 'stop-budget'; stopReason = 'iteration-limit'; }

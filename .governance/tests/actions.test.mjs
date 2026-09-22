@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { digest } from "../core/scope.mjs";
 import { makePlan, validatePlan, validateRequest, payloadDigest } from "../core/plan.mjs";
 import { adapter, applyPlan, context, git, github, localSnapshot, projectFile, receiptFile, withApplyLock } from "../core/actions.mjs";
+import { scopeFixture } from './fixtures.mjs';
 
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -15,7 +16,10 @@ const delivery = { schemaVersion: 1, project: { schemaVersion: 1, repository, br
 const sha = "a".repeat(40), templates = { issue: "## Summary\n## Acceptance", pr: "## Summary\n## Testing" };
 const clone = value => structuredClone(value);
 function fixture(kind = "issue", operation = "create") {
-  const scope = { version: 1, revision: 1, intent: "Deliver reviewed repository action", intentSource: `issue:${kind === "issue" ? operation === "update" ? 507 : 467 : 507}`, boundaries: "Governance only", source: { ref: "chore/507-actions", sha }, criteria: [{ id: "ACTION", outcome: "Reviewed action safely applied", method: "Focused action proof" }] };
+  const scope = scopeFixture({ intent: 'Deliver reviewed repository action',
+    intentSource: `issue:${kind === 'issue' ? operation === 'update' ? 507 : 467 : 507}`,
+    boundaries: 'Governance only.', ref: 'chore/507-actions', sourceSha: sha,
+    criteria: [{ id: 'ACTION', outcome: 'Reviewed action safely applied', method: 'Focused action proof' }] });
   const request = { version: 1, kind, operation, target: { number: operation === "update" ? 507 : null, parent: 467, issue: kind === "issue" ? null : 507 },
     payload: kind === "worktree" ? { name: "child", branch: "chore/507-child" } : { title: "chore: reviewed action", body: `${templates[kind]}\nParent #467. Closes #507\nTarget branch: develop\n- [ ] Acceptance\nRollback: revert`, labels: ["type:chore", "priority:p2", "status:in-progress", "area:devops"], milestone: null }, dependencies: [506], reviewedDuplicates: [], authority: null };
   const snapshot = { local: { repository, baseBranch: "develop", deliveryDigest: digest(delivery), ref: scope.source.ref, head: sha, clean: true, scopeAncestor: true, rootDigest: digest(root), configDigest: digest({}), instructionsDigest: digest([]) }, actor: { login: "maintainer", canWrite: true },

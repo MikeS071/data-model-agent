@@ -38,3 +38,21 @@ Iteration, elapsed-time and repeated-failure limits prevent optimistic infinite 
 The verifier should be distinct from the implementer when an authorized independent agent,
 session or CI boundary exists. The record never proves its own evidence and never grants
 scope change, merge, publication, deployment, provider or worker authority.
+
+## ADR 3: Durable request and design are separate human gates
+
+Status: accepted for the next private candidate.
+
+Store human-readable request and design documents together under
+`docs/features/<slug>/`. The request owns intent, boundaries, assumptions, exclusions and
+observable acceptance. The design owns the technical foundation, Mermaid diagrams,
+failure handling, verification, rollout and stable `D-NNN` decisions. Each document has
+its own revision and explicit acceptance gate; design names the request revision it
+implements.
+
+Only an accepted, tracked and unchanged matching pair can generate the ignored scope-v2
+contract. Git and machine identities are captured by tooling rather than supplied by the
+human. If implementation finds a material gap, it stops: design always advances and is
+reaccepted, while request advances only when product intent or acceptance changes. The
+new pair produces a fresh scope and baseline. This preserves readable durable history
+without making generated evidence part of the product record.

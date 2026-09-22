@@ -37,7 +37,9 @@ outside that block remain yours.
 | --- | --- | --- |
 | `AGENTS.md` | Project instructions and link to dev-stack session policy. | Project, except the marked installer block. |
 | `dev-stack.adapter.json` | Repository identity, branches, instruction paths, templates and verification commands used during install/upgrade. | Project. Keep it secret-free and version it. |
-| `.governance-artifacts/<feature>.scope.json` | One feature's agreed intent, boundaries, source and observable acceptance criteria. | Human and agent for that feature; ignored by Git by default. |
+| `docs/features/<feature>/request.md` | Human-readable intent, boundaries, assumptions, exclusions and acceptance criteria. | Human and agent; versioned project history. |
+| `docs/features/<feature>/design.md` | Accepted architecture, diagrams, decisions, risks and verification strategy for the matching request. | Human and agent; versioned project history. |
+| `.governance-artifacts/<feature>.scope.json` | Generated source-bound contract derived from the accepted request/design pair. | Tool-generated; ignored by Git by default. |
 | `.governance/delivery.json` | Installed delivery configuration generated from the adapter. | Installer; change the adapter and re-apply instead of hand-editing it. |
 | `.governance/verification.json` | Installed allowlist of project verification commands. | Installer, generated from the adapter. |
 | `.governance/policy.md` | Reusable always-on dev-stack policy. | Pinned dev-stack release. |
@@ -45,8 +47,9 @@ outside that block remain yours.
 | `.governance/principles.md` | Router for conditional engineering-principle skills. | Pinned dev-stack release. |
 | `.governance/self-verification.json` | Maximum iterations, repeated failures and elapsed time for a loop. | Pinned dev-stack release. |
 
-The scope file is the most important file for a particular feature: it says what “done”
-means. A passing command cannot silently replace an omitted criterion or change its meaning.
+The request/design pair is the most important feature record: the request says what
+“done” means, while the design says how the system will safely achieve it. A passing
+command cannot silently replace an omitted criterion or change either accepted document.
 
 ## Worked example: build a data-modelling agent
 
@@ -98,8 +101,8 @@ arrays, not shell strings; supported programs are `node`, `python3`, `git`, `pnp
   "verification": {
     "schemaVersion": 1,
     "commands": {
-      "syntax": ["node", "--check", "src/index.mjs"],
-      "unit": ["node", "--test", "test/model.test.mjs"]
+      "unit": ["pnpm", "--dir", "apps/web", "test"],
+      "build": ["pnpm", "--dir", "apps/web", "build"]
     }
   }
 }
@@ -167,16 +170,17 @@ Use $dev-stack-session-initialisation.
 
 I want to build a data-modelling agent that turns domain requirements into Mermaid ER
 diagrams and draw.io XML. Interview me one critical question at a time. Skip anything I
-have already answered. Do not implement yet. When intent, boundaries, acceptance and
-proof are clear, propose revision 1 of the scope and ask me to accept or revise it.
+have already answered. Do not implement yet. First propose request revision 1 and ask me
+to accept or revise it. Only after that gate, clarify the technical foundation one
+critical question at a time, propose design revision 1 and ask me to accept or revise it.
 ```
 
 For an agent host that does not support named skill invocation, use the equivalent:
 
 ```text
 Read AGENTS.md and .governance/skills/session-initialisation/SKILL.md in full, then run
-the same one-question-at-a-time intake. Do not implement until I explicitly accept the
-proposed scope.
+the same one-question-at-a-time intake. Do not implement until I separately accept the
+request and design and then explicitly authorize implementation.
 ```
 
 The agent should ask only unanswered questions that materially affect design or proof.
@@ -186,87 +190,174 @@ For this example, likely decisions are:
 2. What input is accepted: prose, structured JSON, an existing schema, or several forms?
 3. What must Mermaid and draw.io represent: entities, attributes, keys, optionality,
    cardinality, notes, layout, or all of these?
-4. When requirements are ambiguous, should the agent ask a question, produce warnings,
-   or make labelled assumptions?
+4. When requirements are ambiguous, should the agent ask before producing a model,
+   produce a draft then ask, or make labelled assumptions?
 5. Is the interface a CLI, library, service or UI?
-6. What application runtime and model/provider boundary are allowed?
-7. What sensitive data, tenancy, retention and network restrictions apply?
-8. Which concrete examples and failure cases prove success?
-9. What is explicitly excluded from the first feature?
+6. What sensitive data, tenancy, retention and network restrictions apply?
+7. Which concrete examples and failure cases prove success?
+8. What is explicitly excluded from the first feature?
 
 This is a priority list, not a questionnaire to ask mechanically. The skill skips
-answers already supplied and stops interviewing when a reviewable scope is possible.
+answers already supplied and stops interviewing when a reviewable request is possible.
+Architecture questions such as runtime, provider boundary, storage, component ownership,
+failure handling and rollout follow only after the request gate.
 
-### 5. Accept a concrete scope
+### 5. Pass the request gate
 
-The agent first writes the human-readable request below as
-`.governance-artifacts/data-model-agent.request.json`. It contains only intent,
-boundaries and acceptance semantics; no branch, commit or hash needs to be supplied by
-the human. A reasonable first revision might contain criteria like these:
+Copy `.governance/templates/request.md` to
+`docs/features/data-model-agent/request.md` and let the agent fill it from the guided
+answers. It remains `status: proposed` while being reviewed. For this example the user is
+Michal, the tool supports a large insurance organisation, inputs can be prose, schemas,
+DDL or Markdown, and the first fixture is a claim-payment domain. A shortened revision
+looks like this:
 
-```json
-{
-  "version": 1,
-  "revision": 1,
-  "intent": "Provide a CLI that converts reviewed domain requirements into equivalent Mermaid ER and draw.io data models without silently inventing ambiguous relationships.",
-  "intentSource": "direct-user:guided-intake",
-  "boundaries": "Local Node CLI, canonical intermediate model, Mermaid ER and draw.io XML outputs. No database migration, deployment, provider provisioning or merge.",
-  "criteria": [
-    {
-      "id": "MODEL-SEMANTICS",
-      "outcome": "The canonical model preserves entities, attributes, primary and foreign keys, optionality and relationship cardinality from an accepted fixture.",
-      "method": "Run a focused unit test against a literal expected canonical model."
-    },
-    {
-      "id": "MERMAID-OUTPUT",
-      "outcome": "The CLI emits a Mermaid ER diagram representing the accepted canonical model.",
-      "method": "Run the CLI on the fixture and compare parsed entities and relationships with literal expected values."
-    },
-    {
-      "id": "DRAWIO-OUTPUT",
-      "outcome": "The CLI emits importable draw.io XML representing the same entities and relationships.",
-      "method": "Parse the XML and assert the expected cells, labels and edges."
-    },
-    {
-      "id": "AMBIGUITY",
-      "outcome": "Ambiguous relationship requirements produce explicit clarification items and no invented cardinality.",
-      "method": "Run an ambiguous fixture and assert the exact structured clarification result and absence of a fabricated edge."
-    },
-    {
-      "id": "PROJECT-CHECKS",
-      "outcome": "Configured syntax and unit checks pass on the exact candidate.",
-      "method": "Run the syntax and unit commands configured in .governance/verification.json."
-    }
-  ]
-}
+```markdown
+---
+kind: request
+version: 1
+revision: 1
+status: proposed
+slug: data-model-agent
+---
+
+# Data-modelling agent
+
+## Intent
+
+Give Michal a web UI that develops reviewable insurance data models from free-form
+requirements, existing schemas, DDL and Markdown.
+
+## Intent source
+
+Direct user guided intake.
+
+## Boundaries
+
+- Single-user Next.js web application using an OpenAI model boundary.
+- Produce, preview, edit, regenerate, save, retrieve and version Mermaid and draw.io models.
+
+## Assumptions
+
+- Pilot inputs may contain sensitive organisational information and may be persisted.
+
+## Exclusions
+
+- No multi-user authorization, deployment or automatic database migration in this pilot.
+
+## Acceptance criteria
+
+### MODEL-SEMANTICS
+
+**Outcome:** A claim-payment fixture preserves entities, attributes, keys, optionality,
+cardinality, business definitions and validation rules in one canonical model.
+
+**Proof:** Compare the validated canonical result with literal expected domain facts.
+
+### AMBIGUITY
+
+**Outcome:** Ambiguous requirements produce a labelled draft and clarification questions
+without silently inventing a relationship.
+
+**Proof:** Exercise an ambiguous fixture and inspect the draft, warnings and absent edge.
+
+### OUTPUTS
+
+**Outcome:** The accepted canonical version produces equivalent Mermaid and importable
+draw.io representations with a useful layout.
+
+**Proof:** Inspect Mermaid semantics and parse draw.io XML for matching nodes and edges.
+
+### WORKFLOW
+
+**Outcome:** Michal can preview, edit, regenerate, save, retrieve, version and download a model.
+
+**Proof:** Exercise the web workflow and verify stored version history and both downloads.
+
+### PROJECT-CHECKS
+
+**Outcome:** Configured unit and production-build checks pass on the exact candidate.
+
+**Proof:** Run both commands from `.governance/verification.json`.
+
+## Approval
+
+Status: proposed. Awaiting an explicit human decision on request revision 1.
 ```
 
-The intentionally concrete acceptance checks matter more than the particular example.
-For instance, an expected Mermaid relationship might include:
-
-```mermaid
-erDiagram
-  CUSTOMER ||--o{ ORDER : places
-```
-
-The draw.io check should parse XML and establish the same relation; merely checking that
-an output file exists is not acceptance.
-
-Review and revise the semantic request first. When its intent, boundaries and acceptance
-methods are correct, say:
+The concrete acceptance semantics matter more than wording. In particular, parse and
+compare the two representations; file existence alone proves little. The human can ask
+for edits. When satisfied, they say, for example:
 
 ```text
-I accept semantic scope revision 1. Bind it to the current checkout and run the baseline,
-but do not start implementation yet.
+I accept request revision 1. Record that decision and commit the request. Do not design
+or implement until the next gate.
 ```
 
-Create the final scope by binding that semantic request to the current checkout. The
-command stores the branch and commit internally but prints only a readable success state
-and the artifact path:
+Only then does the agent change the frontmatter and Approval text to `accepted` and
+commit the request. No signature, digest or commit ID is requested from the human.
+
+### 6. Establish and accept the design
+
+After the request gate, the agent asks one unresolved architecture question at a time.
+For this example, the important questions include the persistence technology, canonical
+model schema, OpenAI structured-output boundary, editable representation, sensitive-data
+handling, error recovery and rollout. It writes the result using
+`.governance/templates/design.md` at `docs/features/data-model-agent/design.md`.
+
+The accepted design must contain all template sections. A compact form of the chosen
+approach could say that Next.js server routes validate uploads, a model service converts
+them to a typed canonical model, deterministic renderers produce Mermaid and draw.io,
+and a repository stores immutable model versions. Its diagrams use Mermaid:
+
+```mermaid
+flowchart LR
+  Browser --> Next[Next.js server]
+  Next --> Intake[Input normalizer]
+  Intake --> Model[OpenAI model boundary]
+  Model --> Validate[Canonical-model validator]
+  Validate --> Mermaid[Mermaid renderer]
+  Validate --> Drawio[draw.io renderer]
+  Validate --> Store[(Version store)]
+```
+
+```mermaid
+sequenceDiagram
+  Michal->>Next: requirements, schemas, DDL or Markdown
+  Next->>Model: normalized context and schema
+  Model-->>Next: candidate canonical model and questions
+  Next-->>Michal: draft preview
+  Michal->>Next: edits or acceptance
+  Next->>Store: immutable accepted version
+```
+
+The same document records decisions in a table rather than hiding them in prose:
+
+| ID | Decision | Rationale | Alternatives | Consequences |
+| --- | --- | --- | --- | --- |
+| D-001 | Make a validated canonical model the source of both outputs. | It prevents two generators from drifting semantically. | Generate each format directly from the prompt. | Renderers require explicit mappings and tests. |
+| D-002 | Keep model-provider access behind a server-only interface. | Inputs and credentials must not cross the browser boundary. | Call the provider from the browser. | Local development needs a server-side credential. |
+| D-003 | Store immutable versions and make edits create a new version. | Review and rollback need history. | Overwrite the current record. | Storage grows and needs lifecycle handling. |
+
+When the full design is reviewable, the human separately accepts it:
+
+```text
+I accept design revision 1 for request revision 1. Record that decision and commit the
+design. Do not start implementation yet.
+```
+
+Only then does the agent mark and commit the design. A cross-feature decision can also
+be promoted to the project's ADR convention, but its `D-NNN` row stays in the feature
+design. Both documents must now be tracked and unchanged at `HEAD`.
+
+### 7. Generate the private scope and baseline
+
+Bind the accepted pair to the current checkout. The command checks both paths, statuses,
+matching slug and request revision, then records the branch and commit internally:
 
 ```sh
 tools/governance scope create \
-  --request .governance-artifacts/data-model-agent.request.json \
+  --request docs/features/data-model-agent/request.md \
+  --design docs/features/data-model-agent/design.md \
   --output .governance-artifacts/data-model-agent.scope.json
 
 tools/governance scope validate \
@@ -280,32 +371,31 @@ tools/governance config validate --config .governance/config.json
 ```
 
 `baseline` exits 2 and reports `incomplete` by design. It records machine observations,
-then requires a human/lead review of authority, intent coverage, dirty-work ownership,
+then requires lead review of authority, intent coverage, dirty-work ownership,
 instructions and live dependencies. It is not a readiness oracle. A default config
 reports workers as paused with effective capacity zero.
 
 After reviewing the bound source and baseline, authorize implementation explicitly:
 
 ```text
-Start implementation of accepted scope revision 1 using
+Start implementation of the accepted data-model-agent request/design pair using
 $dev-stack-self-verifying-delivery. Do not merge, deploy, configure a provider or
-activate a worker. Return to me if the scope or a test oracle is incomplete or
-contradictory.
+activate a worker. Stop for design review if a material gap is found.
 ```
 
-### 6. Let the bounded loop run
+### 8. Let the bounded loop run
 
 The delivery skill coordinates the workflow; it does not replace engineering judgment:
 
 ```text
-accepted scope
+accepted request + accepted design + generated scope
   -> acceptance tests
   -> smallest complete implementation
   -> configured checks and direct artifact proof
   -> independent criterion and whole-intent verification
   -> classify the observation
        IMPLEMENTATION_DEFECT -> repair and verify a changed candidate
-       SCOPE_GAP             -> human scope review
+       SCOPE_GAP             -> stop for human design review
        TEST_ORACLE_INVALID   -> human acceptance review
        ENVIRONMENT_FAILED    -> repair the environment
        BLOCKED               -> human input or authority
@@ -323,6 +413,11 @@ The final report should identify the candidate, show each criterion and its proo
 commands run, describe limitations and residual risks, and name any remaining approval.
 `SCOPE_VERIFIED` permits reporting only; it does not authorize merge or deployment.
 
+If implementation exposes a material gap, stop rather than patching around it. Increment
+and reaccept `design.md`; increment `request.md` only if intent, boundaries, assumptions,
+exclusions or acceptance semantics change. Commit the accepted pair, generate a fresh
+scope/baseline, and obtain implementation authority again.
+
 ## Starting any new feature or project request
 
 For later work, use the same short sequence:
@@ -331,12 +426,14 @@ For later work, use the same short sequence:
    `.governance/project.json`.
 2. Invoke `dev-stack-session-initialisation` and ask for guided intake if the request is
    not already precise.
-3. Record one semantic scope request with stable criterion IDs, observable outcomes,
-   proof methods and boundaries.
-4. Have the human explicitly accept the scope and test semantics, then let `scope create`
-   bind it to the current checkout automatically.
-5. Invoke `dev-stack-self-verifying-delivery`.
-6. Review the final source-bound report, then separately approve any PR, merge, release,
+3. Draft `docs/features/<slug>/request.md` with stable criterion IDs, observable outcomes,
+   proof methods and boundaries; explicitly accept and commit it.
+4. Clarify the technical foundation, draft the matching `design.md` with Mermaid diagrams
+   and stable decisions, then explicitly accept and commit it as a separate gate.
+5. Generate scope v2 from the accepted pair, run the baseline, and separately authorize
+   implementation.
+6. Invoke `dev-stack-self-verifying-delivery`.
+7. Review the final source-bound report, then separately approve any PR, merge, release,
    deployment, provider or worker action.
 
 If GitHub issue/PR actions will be used, start from the installed issue template and use

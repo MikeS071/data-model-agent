@@ -3,14 +3,15 @@ import test from 'node:test';
 import { digest, validateScope } from '../core/scope.mjs';
 import { inspectProject } from '../core/project.mjs';
 import { inspectConfig, inspectResult, inspectLegacy } from '../core/contracts.mjs';
+import { scopeFixture } from './fixtures.mjs';
 
 const sha = 'a'.repeat(40), proof = `sha256:${'b'.repeat(64)}`, at = '2026-09-15T07:00:00Z';
 // Adapted from the original synthetic contract fixture; no runtime/proof claim.
 function fixture(repository = 'example/alpha', prefix = 'chore') {
   const project = { schemaVersion: 1, repository, branchPrefixes: [prefix] };
   const source = { repository, worktree: '/project/.worktrees/task', ref: `${prefix}/task`, sha };
-  const scope = { version: 1, revision: 1, intent: 'Deliver the recorded scope', intentSource: 'issue:1',
-    boundaries: 'synthetic contract only', source: { ref: source.ref, sha }, criteria: [{ id: 'A', outcome: 'Complete A', method: 'Focused proof' }] };
+  const scope = scopeFixture({ intent: 'Deliver the recorded scope', ref: source.ref, sourceSha: sha,
+    boundaries: 'Synthetic contract only.', criteria: [{ id: 'A', outcome: 'Complete A', method: 'Focused proof' }] });
   const assignment = { id: 'assignment-1', attemptId: 'attempt-1', scopeDigest: digest(scope), scopeRevision: 1, source, runtimeId: 'process-123-start-456' };
   const result = { schemaVersion: 2, assignmentId: assignment.id, attemptId: assignment.attemptId, scopeDigest: digest(scope), scopeRevision: 1,
     source: { ...source, dirty: true, patchProof: proof }, completed: [{ id: 'A', proof }], remaining: [], defects: [], verification: 'passed', blocked: false, executionFailed: false, reportedOutcome: 'SCOPE_VERIFIED' };
@@ -42,8 +43,8 @@ test('adapter schema rejects unknown fields, invalid identity and unsafe prefixe
   }
 });
 
-test('intent and every criterion remain required before work', () => {
-  for (const edit of [{ intent: '' }, { criteria: [] }, { criteria: [{ id: 'A', outcome: 'A' }] }]) {
+test('scope-v2 intent, documents and every criterion remain required before work', () => {
+  for (const edit of [{ version: 1 }, { intent: '' }, { documents: null }, { criteria: [] }, { criteria: [{ id: 'A', outcome: 'A' }] }]) {
     const x = fixture(); Object.assign(x.scope, edit);
     assert.throws(() => validateScope(x.scope));
     assert.equal(inspectResult(x).acceptedScope, false);

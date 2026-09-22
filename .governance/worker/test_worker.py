@@ -71,8 +71,13 @@ class WorkerTests(unittest.TestCase):
         self.env.stop(); os.chdir(self.previous); self.tmp.cleanup()
     def prepare_scope(self, scopes=None):
         self.count += 1
-        scope = {'version': 1, 'revision': 1, 'intent': 'Correct addition without changing the main checkout',
+        scope = {'version': 2, 'revision': 1, 'intent': 'Correct addition without changing the main checkout',
                  'intentSource': 'synthetic S1 fixture', 'boundaries': 'sum and new only',
+                 'assumptions': ['The local fixture is authoritative.'], 'exclusions': ['No external actions.'],
+                 'documents': {'slug': 'synthetic-worker',
+                               'request': {'path': 'docs/features/synthetic-worker/request.md', 'revision': 1},
+                               'design': {'path': 'docs/features/synthetic-worker/design.md', 'revision': 1,
+                                          'requestRevision': 1, 'decisions': ['D-001']}},
                  'source': {'ref': f'chore/fixture-{self.count}', 'sha': w.git(self.repo, 'rev-parse', 'HEAD').decode().strip()},
                  'criteria': [{'id': 'SUM', 'outcome': 'add(2, 3) returns 5', 'method': 'python3 -B test_sum.py'}]}
         authority = {'intent': 'Controlled local test, no inference', 'source': 'test fixture'}

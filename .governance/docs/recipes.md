@@ -4,9 +4,11 @@ Use `tools/governance --help` for the exact command interface. Record the scope'
 intent and acceptance criteria first. Keep plans, source-bound review records and
 usage evidence in ignored `.governance-artifacts/`; retain no secrets or private logs.
 
-1. Run baseline against the intended source and review every reported gap.
-2. Create the final source-bound scope from the accepted semantic request with `scope
-   create`, then validate scope/config. Create a reviewed action plan using the project's delivery
+1. Draft, explicitly accept and commit `docs/features/<slug>/request.md`; then draft,
+   separately accept and commit the matching `design.md`. Use the installed templates.
+2. Create scope v2 from the accepted pair with `scope create`, validate scope/config,
+   run baseline against the intended source and review every reported gap. Then create a
+   reviewed action plan using the project's delivery
    adapter, then explicitly apply it under already established authority. Read back.
 3. Implement a small scope. Run relevant committed verification commands. Create
    `review plan`/`review check` against both the review base and delivery target.
@@ -15,7 +17,8 @@ usage evidence in ignored `.governance-artifacts/`; retain no secrets or private
    Append each source-bound outcome to one ignored ledger, then run `loop inspect` with
    the actual head and `clean` or the dirty patch proof. Follow its typed route. Product
    defects may loop to build; scope/oracle gaps return to human acceptance; environment
-   failures stay outside product repair. Stop at configured iteration, elapsed or repeated
+   failures stay outside product repair. A material gap stops for document revision and
+   reacceptance before a fresh scope/baseline. Stop at configured iteration, elapsed or repeated
    failure bounds. Only `SCOPE_VERIFIED` can return `report`.
 5. Optionally build a compact `review bundle` with the complete diff, selected full
    principle leaves, criterion/check mapping, independently assessed evidence and

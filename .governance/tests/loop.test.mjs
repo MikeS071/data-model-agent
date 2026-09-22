@@ -2,17 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inspectLoop } from '../core/loop.mjs';
 import { digest } from '../core/scope.mjs';
+import { scopeFixture } from './fixtures.mjs';
 
 const sha = 'a'.repeat(40), nextSha = 'b'.repeat(40), proof = `sha256:${'c'.repeat(64)}`;
 const startedAt = '2026-09-22T08:00:00Z', recordedAt = '2026-09-22T08:05:00Z';
-const scope = {
-  version: 1, revision: 1, intent: 'Deliver a synthetic feature', intentSource: 'issue:1', boundaries: 'fixture only',
-  source: { ref: 'feature/task', sha },
-  criteria: [
+const scope = scopeFixture({ sourceSha: sha, criteria: [
     { id: 'A', outcome: 'Complete A', method: 'Focused test' },
     { id: 'B', outcome: 'Complete B', method: 'Artifact inspection' },
-  ],
-};
+  ] });
 const policy = { schemaVersion: 1, maxIterations: 3, maxSameFailure: 2, maxElapsedMinutes: 60 };
 const evidence = (criterionId, kind = 'test') => ({ criterionId, kind, proof });
 const candidate = (value = sha, patchProof = proof, ref = 'feature/task') => ({ ref, sha: value, patchProof });
@@ -51,7 +48,7 @@ test('an implementation defect loops to build and changed source can verify ever
 
 test('scope, oracle and environment failures route to distinct owners', () => {
   for (const [outcome, route] of [
-    ['SCOPE_GAP', 'human-scope-review'],
+    ['SCOPE_GAP', 'human-design-review'],
     ['TEST_ORACLE_INVALID', 'human-acceptance-review'],
     ['ENVIRONMENT_FAILED', 'repair-environment'],
     ['BLOCKED', 'human-input'],

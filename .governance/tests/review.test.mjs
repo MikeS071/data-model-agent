@@ -8,6 +8,7 @@ import { digest } from '../core/scope.mjs';
 import { reviewPlan, inspectReview } from '../core/review.mjs';
 import { reviewBundle } from '../core/economy.mjs';
 import { runVerification, verificationPlan } from '../core/verification.mjs';
+import { scopeFixture } from './fixtures.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const proof = 'sha256:' + 'b'.repeat(64);
 
@@ -27,7 +28,8 @@ test('committed review binds local policy/full leaves and real behavior without 
     writeFileSync(join(cwd, '.governance/verification.json'), JSON.stringify({ schemaVersion: 1, commands: { value: ['node', '-e', 'require("node:assert/strict").equal(require("./value.cjs"), 2)'] } }));
     const commit = () => { git(cwd, 'add', '.'); git(cwd, '-c', 'core.hooksPath=/dev/null', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-m', 'fixture'); return git(cwd, 'rev-parse', 'HEAD'); };
     const base = commit();
-    const scope = { version: 1, revision: 1, intent: 'Return two to the caller', intentSource: 'issue:7', boundaries: 'value.cjs only', source: { ref: 'feature/7-small', sha: base }, criteria: [{ id: 'VALUE', outcome: 'Returns exactly 2', method: 'Execute caller assertion' }] };
+    const scope = scopeFixture({ intent: 'Return two to the caller', intentSource: 'issue:7', boundaries: 'value.cjs only',
+      ref: 'feature/7-small', sourceSha: base, criteria: [{ id: 'VALUE', outcome: 'Returns exactly 2', method: 'Execute caller assertion' }] });
     assert.equal(runVerification({ cwd, scope, project: delivery.project, check: 'value' }).code, 1);
     writeFileSync(join(cwd, 'value.cjs'), 'module.exports = 2;\n');
     const head = commit(); context(cwd, delivery);

@@ -41,11 +41,14 @@ changed inputs or target state refuse. Integration-only release-location and ext
 options remain hidden from normal help; byte identity never substitutes for publisher
 trust or review.
 
-`scope create --request FILE --output .governance-artifacts/NAME.scope.json` accepts the
-semantic scope fields (version, revision, intent, intentSource, boundaries and criteria),
-captures the current Git branch/commit, and writes the complete ignored scope. Its normal
-create/validate output contains readable status and counts, not raw commit or scope
-identifiers. `scope validate` retains the complete source-bound schema internally.
+`scope create --request docs/features/NAME/request.md --design
+docs/features/NAME/design.md --output .governance-artifacts/NAME.scope.json` requires two
+accepted, tracked, unchanged Markdown documents at `HEAD`. It validates their fixed
+sections, matching slug and request revision, Mermaid design diagrams, stable decision
+IDs and acceptance criteria; captures the current Git branch/commit; and writes an ignored
+scope-v2 contract. Normal create/validate output contains readable status and revision
+counts, not raw commit or scope identifiers. Version-1 scope JSON is historical input and
+is rejected by active commands.
 
 Installer exits 2 for a refusal and retains uncertain state.
 

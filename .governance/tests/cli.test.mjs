@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { digest } from '../core/scope.mjs';
+import { designDocument, requestDocument, scopeFixture } from './fixtures.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url))), cli = join(root, 'dev-stack.mjs');
 const run = (cwd, ...args) => spawnSync(process.execPath, [cli, ...args], {
@@ -39,15 +40,14 @@ test('actual CLI refuses unknown inputs and outside/symlink paths without disclo
 test('scope inspection fails without intent and reports readable validation for valid input', () => {
   const cwd = mkdtempSync(join(root, '.cli-proof-'));
   try {
-    const scope = { version: 1, revision: 1, intent: '', intentSource: 'issue:1', boundaries: 'synthetic only',
-      source: { ref: 'chore/task', sha: 'a'.repeat(40) }, criteria: [{ id: 'A', outcome: 'A', method: 'literal check' }] };
+    const scope = scopeFixture({ intent: '', ref: 'chore/task' });
     writeFileSync(join(cwd, 'scope.json'), JSON.stringify(scope));
     assert.equal(run(cwd, 'scope', 'validate', '--scope', 'scope.json').status, 1);
     scope.intent = 'SYNTHETIC-INTENT'; writeFileSync(join(cwd, 'scope.json'), JSON.stringify(scope));
     const result = run(cwd, 'scope', 'validate', '--scope', 'scope.json');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.deepEqual(JSON.parse(result.stdout).result,
-      { state: 'scope-valid', revision: 1, criteria: 1, authority: 'shape-only' });
+      { state: 'scope-valid', slug: 'synthetic-feature', requestRevision: 1, designRevision: 1, criteria: 1, authority: 'shape-only' });
     assert.ok(!result.stdout.includes(scope.intent));
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 });
@@ -59,17 +59,24 @@ test('scope creation captures the current Git source without asking for or print
     git('init', '--initial-branch=feature/guided-scope');
     writeFileSync(join(cwd, '.gitignore'), '.governance-artifacts/\n');
     writeFileSync(join(cwd, 'README.md'), '# fixture\n');
-    git('add', '.gitignore', 'README.md');
+    const feature = join(cwd, 'docs/features/synthetic-feature');
+    mkdirSync(feature, { recursive: true });
+    writeFileSync(join(feature, 'request.md'), requestDocument());
+    writeFileSync(join(feature, 'design.md'), designDocument());
+    git('add', '.gitignore', 'README.md', 'docs');
     git('-c', 'core.hooksPath=/dev/null', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-m', 'fixture');
     mkdirSync(join(cwd, '.governance-artifacts'));
-    const request = { version: 1, revision: 1, intent: 'Create a source-bound scope', intentSource: 'direct-user:test', boundaries: 'fixture only',
-      criteria: [{ id: 'BOUND', outcome: 'Capture current source', method: 'Read the written scope' }] };
-    writeFileSync(join(cwd, 'request.json'), JSON.stringify(request));
-    const head = git('rev-parse', 'HEAD'), result = run(cwd, 'scope', 'create', '--request', 'request.json', '--output', '.governance-artifacts/scope.json');
+    const head = git('rev-parse', 'HEAD'), result = run(cwd, 'scope', 'create',
+      '--request', 'docs/features/synthetic-feature/request.md', '--design', 'docs/features/synthetic-feature/design.md',
+      '--output', '.governance-artifacts/scope.json');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const body = JSON.parse(result.stdout), scope = JSON.parse(readFileSync(join(cwd, body.result.artifact)));
-    assert.deepEqual(body.result, { artifact: '.governance-artifacts/scope.json', state: 'scope-created', source: 'captured-from-current-checkout' });
-    assert.deepEqual(scope, { ...request, source: { ref: 'feature/guided-scope', sha: head } });
+    assert.deepEqual(body.result, { artifact: '.governance-artifacts/scope.json', state: 'scope-created', slug: 'synthetic-feature',
+      requestRevision: 1, designRevision: 1, source: 'captured-from-current-checkout' });
+    assert.deepEqual(scope, scopeFixture({ ref: 'feature/guided-scope', sourceSha: head,
+      intent: 'Deliver the accepted synthetic behavior.', intentSource: 'Direct user acceptance.',
+      boundaries: 'Fixture files only.', assumptions: ['The fixture is local.'],
+      criteria: [{ id: 'A', outcome: 'Complete A for the fixture.', method: 'Run the focused fixture proof.' }] }));
     assert.equal(result.stdout.includes(head), false);
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 });
@@ -86,8 +93,8 @@ test('actual Git baseline is source-bound and never converts observations into r
     git('add', 'AGENTS.md', 'project.json', '.gitignore');
     git('-c', 'core.hooksPath=/dev/null', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-m', 'fixture');
     const sha = git('rev-parse', 'HEAD'), before = git('status', '--porcelain');
-    const scope = { version: 1, revision: 1, intent: 'Observe synthetic baseline', intentSource: 'issue:1', boundaries: 'fixture only',
-      source: { ref: 'task/example', sha }, criteria: [{ id: 'A', outcome: 'Observe source', method: 'Git readback' }] };
+    const scope = scopeFixture({ intent: 'Observe synthetic baseline', ref: 'task/example', sourceSha: sha,
+      criteria: [{ id: 'A', outcome: 'Observe source', method: 'Git readback' }] });
     writeFileSync(join(cwd, 'scope.json'), JSON.stringify(scope));
     const args = ['baseline', '--scope', 'scope.json', '--project', 'project.json'];
     const observed = run(cwd, ...args), result = JSON.parse(observed.stdout).result;
@@ -110,8 +117,8 @@ test('actual Git baseline is source-bound and never converts observations into r
 test('loop CLI returns source-bound build, human-review and report routes', () => {
   const cwd = mkdtempSync(join(root, '.cli-proof-'));
   const sha = 'a'.repeat(40), nextSha = 'b'.repeat(40), proof = `sha256:${'c'.repeat(64)}`;
-  const scope = { version: 1, revision: 1, intent: 'Deliver fixture', intentSource: 'issue:1', boundaries: 'fixture only',
-    source: { ref: 'feature/task', sha }, criteria: [{ id: 'A', outcome: 'Complete A', method: 'Focused test' }] };
+  const scope = scopeFixture({ intent: 'Deliver fixture', ref: 'feature/task', sourceSha: sha,
+    criteria: [{ id: 'A', outcome: 'Complete A', method: 'Focused test' }] });
   const policy = { schemaVersion: 1, maxIterations: 3, maxSameFailure: 2, maxElapsedMinutes: 60 };
   const row = (number, outcome, candidateSha = sha, patchProof = proof, recordedAt = '2026-09-22T08:05:00Z') => ({
     number, candidate: { ref: 'feature/task', sha: candidateSha, patchProof }, outcome, criteria: ['A'],
@@ -134,7 +141,7 @@ test('loop CLI returns source-bound build, human-review and report routes', () =
     result = inspect(ledger([failed, verified]), nextSha, 'clean');
     assert.equal(result.status, 0); assert.equal(JSON.parse(result.stdout).result.route, 'report');
     result = inspect(ledger([row(1, 'SCOPE_GAP')]), sha, proof);
-    assert.equal(result.status, 2); assert.equal(JSON.parse(result.stdout).result.route, 'human-scope-review');
+    assert.equal(result.status, 2); assert.equal(JSON.parse(result.stdout).result.route, 'human-design-review');
     result = inspect(ledger([row(1, 'ENVIRONMENT_FAILED'), row(2, 'ENVIRONMENT_FAILED', sha, proof, '2026-09-22T08:06:00Z')]), sha, proof);
     assert.equal(result.status, 2); assert.equal(JSON.parse(result.stdout).result.stopReason, 'same-failure-limit');
   } finally { rmSync(cwd, { recursive: true, force: true }); }

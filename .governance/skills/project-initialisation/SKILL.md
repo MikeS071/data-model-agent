@@ -24,3 +24,8 @@ not proof of fresh-host invocation. For upgrades, check conflicts and preserve l
 policy. Interrupted operations use explicit recover and verification; do not delete
 state or guess by age/PID. Removal/rollback touches only owned unchanged files/sections
 and retains additions. Report complete, incomplete and manual setup separately.
+
+New feature work starts from `.governance/templates/request.md`, passes the request gate,
+then starts from `.governance/templates/design.md` and passes the separate design gate.
+Both accepted documents are durable project history under `docs/features/<slug>/`; generated
+scope, baseline and loop evidence remain ignored local artifacts.

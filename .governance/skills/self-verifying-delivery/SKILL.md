@@ -5,11 +5,13 @@ description: Run an approved software scope through a bounded build, test, indep
 
 # Self-verifying delivery
 
-Use this skill for implementation after a human has agreed the architecture, boundaries, intent, and acceptance criteria. Start with [session initialisation](../session-initialisation/SKILL.md), then use [verification](../verification/SKILL.md) and [delivery](../delivery/SKILL.md) at their normal gates. This workflow coordinates those contracts; it does not replace them.
+Use this skill for implementation after a human has separately accepted the durable request and its matching architecture/design. Start with [session initialisation](../session-initialisation/SKILL.md), then use [verification](../verification/SKILL.md) and [delivery](../delivery/SKILL.md) at their normal gates. This workflow coordinates those contracts; it does not replace them.
 
 ## Freeze the contract
 
-Record stable criterion IDs, observable outcomes, proof methods, exclusions, and the original intent in a versioned scope. Use `tools/governance scope create` to capture source identity from the checkout rather than asking the human for a ref or SHA. Have the human agree the acceptance semantics before implementation. Tests may translate those semantics into executable checks, but neither the implementation pass nor the verifier may weaken, delete, skip, or reinterpret an accepted criterion to obtain green output. A material scope or oracle change increments the scope revision and returns to human acceptance.
+Require accepted, committed and unchanged `docs/features/<slug>/request.md` and `design.md`. Create scope v2 with `tools/governance scope create --request REQUEST.md --design DESIGN.md --output .governance-artifacts/<slug>.scope.json`; this checks the matching revisions and records source identity without asking the human for a ref or SHA. Tests may translate the accepted semantics into executable checks, but neither the implementation pass nor the verifier may weaken, delete, skip or reinterpret an accepted criterion to obtain green output.
+
+A material gap stops implementation and returns to the design gate. Increment and reaccept the design revision. Increment and reaccept the request revision only if intent, boundaries, assumptions, exclusions or acceptance criteria change; update the design's `requestRevision` whenever the request changes. Commit the accepted pair and create a fresh scope and baseline before resuming. Promote a cross-feature decision to the project's ADR convention when one exists, while retaining its decision ID in the feature design.
 
 Create a project-local ignored ledger for one scope revision. Bind every observation to the candidate SHA and, when dirty, its patch proof; capture both from the checkout without asking the human to provide them. Use `.governance/self-verification.json` for iteration, repeated-failure, and elapsed-time bounds. The ledger is evidence routing, not evidence truth.
 
@@ -32,7 +34,7 @@ Create a project-local ignored ledger for one scope revision. Bind every observa
 | Outcome | Route | Meaning |
 | --- | --- | --- |
 | `IMPLEMENTATION_DEFECT` | `build` | Change product code, produce a new candidate fingerprint, and re-run proof. |
-| `SCOPE_GAP` | `human-scope-review` | The agreed scope is incomplete or contradictory; do not silently expand it. |
+| `SCOPE_GAP` | `human-design-review` | Stop. Decide whether the gap changes design only or also the request, revise the required documents and reaccept them. |
 | `TEST_ORACLE_INVALID` | `human-acceptance-review` | The test contradicts or cannot prove accepted behavior; do not change code to satisfy a bad oracle. |
 | `ENVIRONMENT_FAILED` | `repair-environment` | Repair or obtain the approved test environment without treating this as a product failure. |
 | `BLOCKED` | `human-input` | Required authority, dependency, secret, decision, or external state is unavailable. |
