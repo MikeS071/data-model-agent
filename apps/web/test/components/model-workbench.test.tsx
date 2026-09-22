@@ -88,6 +88,12 @@ describe('Michal modelling workflow', () => {
     expect(liveOutput.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chat.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(editor.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Interactive model canvas' })).toBeTruthy();
+    expect(screen.getByText('100%')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(screen.getByText('125%')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Reset model view' }));
+    expect(screen.getByText('100%')).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Model chat' }).textContent).toContain('Should an external payment reference be unique?');
     expect(screen.queryByLabelText('Clarification answer')).toBeNull();
 

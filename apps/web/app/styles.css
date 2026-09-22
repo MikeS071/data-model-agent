@@ -189,9 +189,20 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
 .segmented { background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 8px; display: flex; padding: 3px; }
 .segmented button { background: transparent; border-radius: 6px; color: var(--muted); min-height: 34px; padding: 6px 10px; }
 .segmented button.active, .segmented button[aria-pressed="true"] { background: white; box-shadow: 0 1px 4px rgba(19,43,58,.12); color: var(--primary-strong); }
-.mermaid-preview, .diagram-scroll { background: white; border: 1px solid var(--border); border-radius: 8px; max-height: 520px; min-height: 300px; overflow: auto; padding: 14px; }
-.mermaid-preview svg { height: auto; max-width: 100%; }
-.diagram-preview { min-width: 780px; width: 100%; }
+.canvas-toolbar { align-items: center; display: flex; gap: 14px; justify-content: space-between; margin-bottom: 8px; }
+.canvas-help { color: var(--muted); font-size: .7rem; line-height: 1.4; }
+.canvas-controls { align-items: center; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 9px; display: flex; flex: none; gap: 3px; padding: 3px; }
+.canvas-controls output { color: var(--foreground); font-size: .72rem; font-weight: 800; min-width: 48px; text-align: center; }
+.canvas-control, .canvas-reset { align-items: center; background: white; border: 1px solid transparent; border-radius: 6px; color: var(--primary-strong); cursor: pointer; display: inline-flex; justify-content: center; min-height: 40px; }
+.canvas-control { padding: 0; width: 40px; }
+.canvas-reset { gap: 6px; padding: 6px 9px; }
+.canvas-control:hover, .canvas-reset:hover { background: var(--primary-soft); border-color: #7dd3fc; }
+.model-canvas { background: white; border: 1px solid var(--border); border-radius: 8px; cursor: grab; height: 420px; overflow: hidden; position: relative; touch-action: none; user-select: none; }
+.model-canvas.dragging { cursor: grabbing; }
+.model-canvas-content { min-height: 100%; transform-origin: 0 0; width: 100%; will-change: transform; }
+.model-canvas .mermaid-preview { min-height: 420px; padding: 18px; }
+.model-canvas .mermaid-preview svg { height: auto; max-width: 100%; }
+.diagram-preview { display: block; min-width: 780px; padding: 14px; width: 100%; }
 .entity-card { fill: white; stroke: var(--primary); stroke-width: 2; }
 .entity-title { fill: var(--primary-strong); font-size: 18px; font-weight: 800; }
 .entity-field { fill: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
@@ -252,7 +263,12 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
   .relationship-row > :nth-child(7) { grid-column: 3; grid-row: 1; }
   .intake-actions { align-items: flex-start; flex-direction: column; }
   .primary-button, .secondary-button { min-height: 44px; }
-  .mermaid-preview, .diagram-scroll { min-height: 260px; }
+  .canvas-toolbar { align-items: flex-start; flex-direction: column; }
+  .canvas-controls { width: 100%; }
+  .canvas-control, .canvas-reset { min-height: 44px; }
+  .canvas-reset { margin-left: auto; }
+  .model-canvas { height: 320px; }
+  .model-canvas .mermaid-preview { min-height: 320px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

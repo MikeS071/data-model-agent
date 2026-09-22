@@ -89,7 +89,9 @@ Open `http://127.0.0.1:3000`.
    assistant** beside it. If the assistant shows **Next clarification**, answer directly
    in the chat box and select **Send message**. The answer and the pending question are
    sent with the current model; a successful reply updates the validated draft and moves
-   to the next question.
+   to the next question. In either model view, scroll over the canvas to zoom and drag it
+   with the primary mouse button to move around. The visible controls and the `+`, `-`,
+   `0` and arrow keys provide equivalent keyboard operation.
 5. Refine the canonical model in the structured editor below the live output. Form changes
    autosave. You can use the same chat at any time to request another model change.
 6. Expand **Canonical JSON · read only** when you need to inspect the underlying model,

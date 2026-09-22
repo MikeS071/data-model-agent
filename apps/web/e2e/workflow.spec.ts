@@ -119,6 +119,29 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await expect(page.getByText('A claim uses one currency for approval and payments.')).toBeVisible();
   await expect(page.getByText('Should an external payment reference be unique?')).toBeVisible();
   await expect(page.locator('.mermaid-preview svg')).toBeVisible();
+  const modelCanvas = page.getByRole('group', { name: 'Interactive model canvas' });
+  const canvasContent = modelCanvas.locator('.model-canvas-content');
+  await expect(canvasContent).toHaveAttribute('data-scale', '1');
+  const canvasBox = await modelCanvas.boundingBox();
+  expect(canvasBox).toBeTruthy();
+  const scrollBeforeZoom = await page.evaluate(() => window.scrollY);
+  await page.mouse.move(canvasBox!.x + canvasBox!.width / 2, canvasBox!.y + canvasBox!.height / 2);
+  await page.mouse.wheel(0, -420);
+  await expect.poll(async () => Number(await canvasContent.getAttribute('data-scale'))).toBeGreaterThan(1);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBeforeZoom);
+
+  const panBeforeDrag = Number(await canvasContent.getAttribute('data-offset-x'));
+  await page.mouse.down();
+  await page.mouse.move(canvasBox!.x + canvasBox!.width / 2 + 70, canvasBox!.y + canvasBox!.height / 2 + 45, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await canvasContent.getAttribute('data-offset-x'))).toBeGreaterThan(panBeforeDrag);
+  const panBeforeKeyboard = Number(await canvasContent.getAttribute('data-offset-x'));
+  await modelCanvas.press('ArrowRight');
+  await expect.poll(async () => Number(await canvasContent.getAttribute('data-offset-x'))).toBeGreaterThan(panBeforeKeyboard);
+  await page.getByRole('button', { name: 'Reset model view' }).click();
+  await expect(canvasContent).toHaveAttribute('data-scale', '1');
+  await expect(canvasContent).toHaveAttribute('data-offset-x', '0');
+  await expect(canvasContent).toHaveAttribute('data-offset-y', '0');
   const entityEditors = page.locator('details.entity-editor');
   await expect(entityEditors).toHaveCount(2);
   await expect(entityEditors.nth(0)).toHaveAttribute('open', '');
@@ -150,6 +173,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
 
   await page.getByRole('button', { name: 'draw.io' }).click();
   await expect(page.getByRole('button', { name: 'draw.io' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(canvasContent).toHaveAttribute('data-scale', '1');
   await expect(page.getByRole('img', { name: 'draw.io model preview' })).toBeVisible();
   await page.getByText(/Canonical JSON/u).click();
   await expect(page.locator('pre').filter({ hasText: 'Insurance Claim' })).toBeVisible();

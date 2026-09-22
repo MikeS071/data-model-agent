@@ -1,6 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import type { CanonicalModel, GenerationResult, SourceArtifact, SourceArtifactInput, SourceKind } from '@/domain/model';
 
 interface VersionSummary { id: string; versionNumber: number; createdAt: string }
@@ -57,7 +65,7 @@ function DiagramPreview({ model }: { model: CanonicalModel }) {
   const width = Math.max(900, ...model.entities.map(entity => entity.position.x + 340));
   const height = Math.max(420, ...model.entities.map(entity => entity.position.y + 260));
   const byId = new Map(model.entities.map(entity => [entity.id, entity]));
-  return <div className="diagram-scroll"><svg className="diagram-preview" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="draw.io model preview">
+  return <svg className="diagram-preview" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="draw.io model preview">
     <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" /></marker></defs>
     {model.relationships.map(relationship => {
       const from = byId.get(relationship.fromEntityId), to = byId.get(relationship.toEntityId);
@@ -73,20 +81,135 @@ function DiagramPreview({ model }: { model: CanonicalModel }) {
         {attribute.key !== 'NONE' ? `${attribute.key} ` : ''}{attribute.name}: {attribute.dataType}{attribute.required ? '' : '?'}
       </text>)}
     </g>)}
-  </svg></div>;
+  </svg>;
 }
 
-type IconName = 'arrow' | 'chevron' | 'database' | 'plus' | 'shield' | 'trash';
+type IconName = 'arrow' | 'chevron' | 'database' | 'minus' | 'plus' | 'reset' | 'shield' | 'trash';
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
     arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
     chevron: <path d="m8 10 4 4 4-4" />,
     database: <><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></>,
+    minus: <path d="M5 12h14" />,
     plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+    reset: <><path d="M4 12a8 8 0 1 0 2.3-5.7" /><path d="M4 4v6h6" /></>,
     shield: <path d="M12 3 5 6v5c0 4.6 2.9 8.1 7 10 4.1-1.9 7-5.4 7-10V6l-7-3Z" />,
     trash: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="m7 7 1 13h8l1-13" /></>,
   };
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
+const MODEL_VIEW_DEFAULT = { scale: 1, x: 0, y: 0 };
+const clampScale = (value: number) => Math.min(2.5, Math.max(.5, Math.round(value * 1000) / 1000));
+
+function InteractiveModelCanvas({ children }: { children: ReactNode }) {
+  const canvas = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ pointerId: number; startX: number; startY: number; x: number; y: number } | null>(null);
+  const [view, setView] = useState(MODEL_VIEW_DEFAULT);
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    const target = canvas.current;
+    if (!target) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = target.getBoundingClientRect();
+      const anchorX = event.clientX - rect.left;
+      const anchorY = event.clientY - rect.top;
+      setView(current => {
+        const scale = clampScale(current.scale * Math.exp(-event.deltaY * .0015));
+        return {
+          scale,
+          x: anchorX - ((anchorX - current.x) / current.scale) * scale,
+          y: anchorY - ((anchorY - current.y) / current.scale) * scale,
+        };
+      });
+    };
+    target.addEventListener('wheel', handleWheel, { passive: false });
+    return () => target.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  const zoomFromCentre = (factor: number) => {
+    const rect = canvas.current?.getBoundingClientRect();
+    const anchorX = rect ? rect.width / 2 : 0;
+    const anchorY = rect ? rect.height / 2 : 0;
+    setView(current => {
+      const scale = clampScale(current.scale * factor);
+      return {
+        scale,
+        x: anchorX - ((anchorX - current.x) / current.scale) * scale,
+        y: anchorY - ((anchorY - current.y) / current.scale) * scale,
+      };
+    });
+  };
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.currentTarget.focus();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: view.x, y: view.y };
+    setDragging(true);
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = drag.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    setView(current => ({ ...current, x: start.x + event.clientX - start.startX, y: start.y + event.clientY - start.startY }));
+  };
+
+  const finishDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (drag.current?.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    drag.current = null;
+    setDragging(false);
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const pan = 40;
+    if (event.key === 'ArrowLeft') setView(current => ({ ...current, x: current.x - pan }));
+    else if (event.key === 'ArrowRight') setView(current => ({ ...current, x: current.x + pan }));
+    else if (event.key === 'ArrowUp') setView(current => ({ ...current, y: current.y - pan }));
+    else if (event.key === 'ArrowDown') setView(current => ({ ...current, y: current.y + pan }));
+    else if (event.key === '+' || event.key === '=') zoomFromCentre(1.25);
+    else if (event.key === '-') zoomFromCentre(.8);
+    else if (event.key === '0') setView(MODEL_VIEW_DEFAULT);
+    else return;
+    event.preventDefault();
+  };
+
+  return <div className="model-canvas-block">
+    <div className="canvas-toolbar">
+      <span className="canvas-help" id="model-canvas-help">Scroll to zoom · drag to move · arrow keys to pan</span>
+      <div className="canvas-controls">
+        <button className="canvas-control" type="button" aria-label="Zoom out" onClick={() => zoomFromCentre(.8)}><Icon name="minus" /></button>
+        <output aria-label="Zoom level" aria-live="polite">{Math.round(view.scale * 100)}%</output>
+        <button className="canvas-control" type="button" aria-label="Zoom in" onClick={() => zoomFromCentre(1.25)}><Icon name="plus" /></button>
+        <button className="canvas-reset" type="button" aria-label="Reset model view" onClick={() => setView(MODEL_VIEW_DEFAULT)}><Icon name="reset" />Reset</button>
+      </div>
+    </div>
+    <div
+      ref={canvas}
+      className={`model-canvas${dragging ? ' dragging' : ''}`}
+      role="group"
+      aria-label="Interactive model canvas"
+      aria-describedby="model-canvas-help"
+      tabIndex={0}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishDrag}
+      onPointerCancel={finishDrag}
+      onLostPointerCapture={() => { drag.current = null; setDragging(false); }}
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        className="model-canvas-content"
+        data-scale={view.scale}
+        data-offset-x={view.x}
+        data-offset-y={view.y}
+        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+      >{children}</div>
+    </div>
+  </div>;
 }
 
 export function ModelWorkbench() {
@@ -315,7 +438,9 @@ export function ModelWorkbench() {
           <div className="model-collaboration-grid">
             <section className="panel preview-card" role="region" aria-label="Live model output">
               <div className="section-heading"><div><span className="eyebrow">Live output</span><h2>Model representations</h2><p>Both views are derived from the canonical model and update with each saved change.</p></div><div className="segmented" aria-label="Preview format"><button aria-pressed={preview === 'mermaid'} className={preview === 'mermaid' ? 'active' : ''} onClick={() => setPreview('mermaid')}>Mermaid</button><button aria-pressed={preview === 'drawio'} className={preview === 'drawio' ? 'active' : ''} onClick={() => setPreview('drawio')}>draw.io</button></div></div>
-              {preview === 'mermaid' ? <MermaidPreview source={mermaid} /> : <DiagramPreview model={project.draft.model} />}
+              <InteractiveModelCanvas key={preview}>
+                {preview === 'mermaid' ? <MermaidPreview source={mermaid} /> : <DiagramPreview model={project.draft.model} />}
+              </InteractiveModelCanvas>
               <details className="json-details"><summary>Canonical JSON <span>Read only</span></summary><pre className="code-preview">{JSON.stringify(project.draft.model, null, 2)}</pre></details>
             </section>
 
