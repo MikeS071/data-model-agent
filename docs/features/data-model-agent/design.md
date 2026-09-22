@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 3
+revision: 4
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -39,6 +39,12 @@ pure renderers derive Mermaid ER and draw.io XML from the same canonical model. 
 provides structured entity, attribute, rule and relationship forms; canonical JSON is
 read-only diagnostic output. Mermaid and draw.io previews are read-only, while downloads
 contain the generated source formats.
+
+A model project exists independently of provider generation. Michal can save, reopen and
+edit its name, requirements and source artifacts before any draft exists, then generate
+when the intake is ready. Deleting a project is an explicit confirmed action that removes
+the project and its cascading source, working-draft and version records; cancellation
+must leave all records unchanged.
 
 Use the project-local UI/UX Pro Max output in
 `design-system/data-model-agent/MASTER.md` as the visual interaction contract. Present the
@@ -203,7 +209,8 @@ ambiguity, invalid structure, timeout, incomplete output, safe diagnostics and m
 invalid configuration; a client-bundle check guards against credential leakage.
 
 Repository integration tests use a temporary SQLite database to prove source retention,
-autosave, transactional immutable versions, list, reopen and continue-from-version.
+pre-generation update and delete, autosave, transactional immutable versions, list,
+reopen and continue-from-version.
 Renderer tests parse Mermaid semantics and draw.io XML and compare both with the same
 canonical fixture. Component tests exercise structured editing and read-only diagnostic
 views. A browser test covers create, generate draft, answer clarification, edit, autosave,
@@ -243,6 +250,7 @@ of scope.
 | D-012 | Store generated representations with each immutable version. | Reopened versions retain the exact reviewed outputs. | Regenerate every historical view. | Version storage is larger but deterministic review is simpler. |
 | D-013 | Use a responsive three-zone enterprise workbench with progressive entity disclosure and a persistent preview rail. | It keeps dense modelling tasks scannable and puts model feedback beside the edit that causes it. | Marketing hero with a single long form; separate editor and preview pages. | The layout stacks at narrower widths and UI tests must cover disclosure, focus, feedback and responsive behavior. |
 | D-014 | Make synchronous OpenAI generation bounds configurable, defaulting to a 120-second timeout, low reasoning effort and 8,000 generated tokens, with typed non-sensitive diagnostics. | The original fixed 45-second deadline aborted valid `gpt-5.6-sol` structured-output work while connectivity and model access were healthy. | Keep the fixed deadline; immediately adopt streaming/background jobs; hard-code a faster model. | Operators can tune latency without source edits; capped incomplete responses fail explicitly; streaming remains a later measured improvement. |
+| D-015 | Treat project intake as a saved lifecycle stage before provider generation, with editable inputs and confirmed project deletion. | A provider failure must not trap a saved project in a read-only retry screen, and users need to prepare work without making a provider call. | Create projects only as a side effect of Generate; require database cleanup for abandoned projects. | The API supports update and delete, deletes cascade transactionally, and the UI distinguishes Save model from Generate draft. |
 
 ## Approval
 
@@ -253,3 +261,6 @@ visual and interaction decision without changing request intent or acceptance cr
 After two observed 45-second provider aborts, Michal explicitly approved the proposed
 configurable provider bounds, low reasoning and diagnostic fix. That decision accepts
 revision 3 and D-014 without changing request intent or acceptance criteria.
+Michal then explicitly required models to remain editable and deletable before generation.
+That direct feature decision accepts revision 4 and D-015; it advances the lifecycle
+design without changing the accepted modelling intent.
