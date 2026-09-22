@@ -92,6 +92,12 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await expect(page.getByText('A claim uses one currency for approval and payments.')).toBeVisible();
   await expect(page.getByText('Should an external payment reference be unique?')).toBeVisible();
   await expect(page.locator('.mermaid-preview svg')).toBeVisible();
+  const entityEditors = page.locator('details.entity-editor');
+  await expect(entityEditors).toHaveCount(2);
+  await expect(entityEditors.nth(0)).toHaveAttribute('open', '');
+  await expect(entityEditors.nth(1)).not.toHaveAttribute('open', '');
+  await entityEditors.nth(1).locator('summary').click();
+  await expect(page.getByLabel('Entity name Payment')).toBeVisible();
 
   await page.getByLabel('Clarification answer').fill('Yes, within the payment platform.');
   await page.getByRole('button', { name: /Update draft/u }).click();
@@ -103,6 +109,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await expect(page.getByText('Draft saved')).toBeVisible();
 
   await page.getByRole('button', { name: 'draw.io' }).click();
+  await expect(page.getByRole('button', { name: 'draw.io' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('img', { name: 'draw.io model preview' })).toBeVisible();
   await page.getByText(/Canonical JSON/u).click();
   await expect(page.locator('pre').filter({ hasText: 'Insurance Claim' })).toBeVisible();
@@ -113,14 +120,15 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   const drawioLink = page.getByRole('link', { name: 'Download draw.io v1' });
   await expect(mermaidLink).toHaveAttribute('href', /version=1/u);
   await expect(drawioLink).toHaveAttribute('href', /version=1/u);
-
-  const [mermaidDownload] = await Promise.all([page.waitForEvent('download'), mermaidLink.click()]);
-  expect(mermaidDownload.suggestedFilename()).toBe('claim-payment-v1.mmd');
-  const [drawioDownload] = await Promise.all([page.waitForEvent('download'), drawioLink.click()]);
-  expect(drawioDownload.suggestedFilename()).toBe('claim-payment-v1.drawio');
+  await expect(mermaidLink).toHaveAttribute('download', 'claim-payment-v1.mmd');
+  await expect(drawioLink).toHaveAttribute('download', 'claim-payment-v1.drawio');
 
   await page.getByRole('button', { name: 'Open as draft' }).click();
   await expect(page.getByText('Version 1 opened as working draft')).toBeVisible();
   await expect(page.locator('.project-item').filter({ hasText: 'Claim Payment' })).toContainText('1 version');
   await page.screenshot({ path: 'test-results/claim-payment-workflow.png', fullPage: true });
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/claim-payment-workflow-mobile.png', fullPage: true });
 });

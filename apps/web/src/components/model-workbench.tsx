@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CanonicalModel, GenerationResult, SourceArtifact, SourceArtifactInput, SourceKind } from '@/domain/model';
 
 interface VersionSummary { id: string; versionNumber: number; createdAt: string }
@@ -62,6 +62,19 @@ function DiagramPreview({ model }: { model: CanonicalModel }) {
   </svg></div>;
 }
 
+type IconName = 'arrow' | 'chevron' | 'database' | 'plus' | 'shield' | 'trash';
+function Icon({ name }: { name: IconName }) {
+  const paths: Record<IconName, ReactNode> = {
+    arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
+    chevron: <path d="m8 10 4 4 4-4" />,
+    database: <><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></>,
+    plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+    shield: <path d="M12 3 5 6v5c0 4.6 2.9 8.1 7 10 4.1-1.9 7-5.4 7-10V6l-7-3Z" />,
+    trash: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="m7 7 1 13h8l1-13" /></>,
+  };
+  return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
+}
+
 export function ModelWorkbench() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<Project | null>(null);
@@ -71,10 +84,20 @@ export function ModelWorkbench() {
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
   const [preview, setPreview] = useState<'mermaid' | 'drawio'>('mermaid');
+  const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
   const editRevision = useRef(0);
 
   const refreshProjects = async () => setProjects(await requestJson<ProjectSummary[]>('/api/projects'));
   useEffect(() => { void refreshProjects().catch(error => setError(message(error))); }, []);
+  useEffect(() => {
+    if (!project?.draft) { setExpandedEntities(new Set()); return; }
+    setExpandedEntities(current => {
+      const valid = new Set(project.draft!.model.entities.map(entity => entity.id));
+      const next = new Set([...current].filter(id => valid.has(id)));
+      if (next.size === 0 && project.draft!.model.entities[0]) next.add(project.draft!.model.entities[0].id);
+      return next;
+    });
+  }, [project?.id, project?.draft?.model.entities]);
 
   useEffect(() => {
     if (!project?.draft || !dirty) return;
@@ -175,55 +198,68 @@ export function ModelWorkbench() {
   };
 
   const latest = project?.versions[0]?.versionNumber ?? null;
+  const downloadStem = project?.title.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/(^-|-$)/gu, '') || 'model';
   const foreignKeyTargets = project?.draft?.model.entities.flatMap(entity => entity.attributes
     .filter(attribute => attribute.key === 'PK')
     .map(attribute => ({ value: `${entity.id}:${attribute.id}`, label: `${entity.name}.${attribute.name}` }))) ?? [];
+  // Background draft persistence must not lock the editor or prevent an explicit
+  // version save; saveVersion writes the latest in-memory draft before snapshotting.
+  const busy = status.endsWith('…') && status !== 'Saving draft…';
   return <main className="app-shell">
-    <header className="hero">
-      <div><span className="eyebrow">Insurance data design workspace</span><h1>Turn complex requirements into models people can trust.</h1>
-        <p>Develop one canonical model, clarify uncertainty, then export consistent Mermaid and draw.io representations.</p></div>
+    <a className="skip-link" href="#work-area">Skip to work area</a>
+    <header className="product-header">
+      <div className="brand-lockup"><span className="brand-mark"><Icon name="database" /></span><span><strong>Model Foundry</strong><small>Insurance data design</small></span></div>
       <div className="pilot-badge"><span className="signal" />Local single-user pilot</div>
     </header>
+    {!project && <header className="hero">
+      <div><span className="eyebrow">Structured modelling workspace</span><h1>Turn complex requirements into models people can trust.</h1>
+        <p>Develop one canonical model, surface uncertainty, and export consistent Mermaid and draw.io representations.</p></div>
+    </header>}
 
     <div className="workspace">
-      <aside className="sidebar panel">
-        <div className="section-heading"><div><span className="step">01</span><h2>Models</h2></div><button className="text-button" onClick={() => { setProject(null); setIntake(emptyDraft); setError(''); }}>New</button></div>
-        <div className="project-list">{projects.length ? projects.map(item => <button className={`project-item ${project?.id === item.id ? 'active' : ''}`} key={item.id} onClick={() => void loadProject(item.id)}>
-          <strong>{item.title}</strong><span>{item.versionCount} version{item.versionCount === 1 ? '' : 's'} · {item.hasDraft ? 'draft' : 'empty'}</span>
-        </button>) : <p className="empty-copy">No saved models yet</p>}</div>
-        <div className="privacy-note"><strong>Before you generate</strong><p>Generate sends the supplied material to OpenAI through the server. Credentials stay server-side.</p></div>
+      <aside className="sidebar panel" aria-label="Saved models">
+        <div className="sidebar-heading"><div><span className="eyebrow">Workspace</span><h2>Models</h2></div><button className="secondary-button compact-button" onClick={() => { setProject(null); setIntake(emptyDraft); setError(''); }}>New model</button></div>
+        <div className="project-list">{projects.length ? projects.map(item => <button className={`project-item ${project?.id === item.id ? 'active' : ''}`} aria-pressed={project?.id === item.id} key={item.id} onClick={() => void loadProject(item.id)}>
+          <strong>{item.title}</strong><span>{item.versionCount} version{item.versionCount === 1 ? '' : 's'} · {item.hasDraft ? 'working draft' : 'empty'}</span>
+        </button>) : <div className="empty-state"><Icon name="database" /><p>No saved models yet</p><span>Create your first model from requirements or source files.</span></div>}</div>
+        <div className="privacy-note"><span className="privacy-icon"><Icon name="shield" /></span><div><strong>Before you generate</strong><p>Generate sends the supplied material to OpenAI through the server. Credentials stay server-side.</p></div></div>
       </aside>
 
-      <section className="main-column">
+      <section className="main-column" id="work-area" tabIndex={-1}>
+        {error && <div className="error-banner" role="alert"><strong>Action stopped</strong><span>{error}</span></div>}
         {!project ? <section className="panel intake-card">
-          <div className="section-heading"><div><span className="step">02</span><h2>Start a model</h2></div><span className="status-dot">{status}</span></div>
+          <div className="section-heading"><div><span className="eyebrow">New model</span><h2>Start with what you know</h2><p>Incomplete requirements are expected. The draft keeps assumptions and questions visible.</p></div><span className="status-dot" aria-live="polite">{status}</span></div>
           <label>Model name<input aria-label="Model name" value={intake.title} onChange={event => setIntake({ ...intake, title: event.target.value })} placeholder="e.g. Claim Payment" /></label>
           <label>Requirements<textarea aria-label="Requirements" value={intake.requirements} onChange={event => setIntake({ ...intake, requirements: event.target.value })} placeholder="Describe the entities, relationships, rules and questions…" rows={8} /></label>
-          <label className="file-drop">Source files<input aria-label="Source files" type="file" multiple accept=".md,.txt,.sql,.ddl,.json" onChange={event => void filesSelected(event.target.files)} />
-            <span>Drop or choose Markdown, text, SQL, DDL or JSON</span></label>
+          <label className="file-drop"><span className="file-drop-title"><Icon name="plus" />Add source files</span><input aria-label="Source files" type="file" multiple accept=".md,.txt,.sql,.ddl,.json" onChange={event => void filesSelected(event.target.files)} />
+            <span>Markdown, text, SQL, DDL or JSON · treated as inert text</span></label>
           {intake.sources.length > 0 && <ul className="source-list">{intake.sources.map(source => <li key={source.name}>{source.name}<span>{source.kind}</span></li>)}</ul>}
-          <button className="primary-button" disabled={!intake.title.trim() || !intake.requirements.trim()} onClick={() => void generate()}>Generate draft <span>→</span></button>
+          <div className="intake-actions"><button className="primary-button" disabled={busy || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void generate()}>Generate draft <Icon name="arrow" /></button><span>Creates a working draft, not a saved version.</span></div>
         </section> : project.draft ? <>
           <section className="panel model-header">
-            <div><span className="eyebrow">Working draft</span><h2>{project.draft.model.name} model</h2><p>{project.draft.model.businessDefinition}</p></div>
-            <div className="header-actions"><span className="status-dot">{status}</span><button className="secondary-button" onClick={() => void generate()}>Regenerate</button><button className="primary-button compact" onClick={() => void saveVersion()}>Save version</button></div>
+            <div><span className="eyebrow">Working draft</span><h1>{project.draft.model.name} model</h1><p>{project.draft.model.businessDefinition}</p></div>
+            <div className="header-actions"><span className="status-dot" aria-live="polite">{status}</span><button className="secondary-button" disabled={busy} onClick={() => void generate()}>Regenerate</button><button className="primary-button" disabled={busy} onClick={() => void saveVersion()}>Save version</button></div>
           </section>
 
           {(project.draft.assumptions.length > 0 || project.draft.warnings.length > 0 || project.draft.clarificationQuestions.length > 0) && <section className="review-grid">
             <div className="panel review-card"><span className="card-label">Assumptions</span>{project.draft.assumptions.length ? <ul>{project.draft.assumptions.map(item => <li key={item}>{item}</li>)}</ul> : <p>None</p>}</div>
             <div className="panel review-card warning"><span className="card-label">Warnings</span>{project.draft.warnings.length ? <ul>{project.draft.warnings.map(item => <li key={item}>{item}</li>)}</ul> : <p>No warnings</p>}</div>
             <div className="panel review-card question"><span className="card-label">Next clarification</span><p>{project.draft.clarificationQuestions[0] ?? 'No open questions'}</p>
-              {project.draft.clarificationQuestions[0] && <><input aria-label="Clarification answer" value={clarification} onChange={event => setClarification(event.target.value)} placeholder="Answer this question" /><button className="text-button" onClick={() => void generate()}>Update draft →</button></>}</div>
+              {project.draft.clarificationQuestions[0] && <><label>Answer<input aria-label="Clarification answer" value={clarification} onChange={event => setClarification(event.target.value)} placeholder="Answer this question" /></label><button className="text-button" disabled={busy || !clarification.trim()} onClick={() => void generate()}>Update draft <Icon name="arrow" /></button></>}</div>
           </section>}
 
           <section className="panel editor-card">
-            <div className="section-heading"><div><span className="step">03</span><h2>Structured editor</h2></div><span>{project.draft.model.entities.length} entities · {project.draft.model.relationships.length} relationships</span></div>
+            <div className="section-heading"><div><span className="eyebrow">Canonical model</span><h2>Structured editor</h2><p>Edit the source of truth. Changes autosave to this working draft.</p></div><span className="count-badge">{project.draft.model.entities.length} entities · {project.draft.model.relationships.length} relationships</span></div>
             <div className="model-fields">
               <label>Model name<input aria-label="Canonical model name" value={project.draft.model.name} onChange={event => updateModel(model => { model.name = event.target.value; })} /></label>
               <label>Business definition<textarea aria-label="Canonical model business definition" value={project.draft.model.businessDefinition} onChange={event => updateModel(model => { model.businessDefinition = event.target.value; })} rows={2} /></label>
             </div>
-            <div className="entity-grid">{project.draft.model.entities.map((entity, entityIndex) => <article className="entity-editor" key={entity.id}>
-              <div className="entity-editor-head"><span>Entity {String(entityIndex + 1).padStart(2, '0')}</span><button className="icon-button" disabled={project.draft!.model.entities.length === 1} aria-label={`Remove ${entity.name}`} onClick={() => updateModel(model => {
+            <div className="entity-grid">{project.draft.model.entities.map((entity, entityIndex) => <details className="entity-editor" open={expandedEntities.has(entity.id)} onToggle={event => {
+              const open = event.currentTarget.open;
+              setExpandedEntities(current => { const next = new Set(current); if (open) next.add(entity.id); else next.delete(entity.id); return next; });
+            }} key={entity.id}>
+              <summary><span className="entity-ordinal">Entity {String(entityIndex + 1).padStart(2, '0')}</span><span className="entity-summary"><strong>{entity.name}</strong><small>{entity.attributes.length} attributes</small></span><Icon name="chevron" /></summary>
+              <div className="entity-body"><div className="entity-editor-head"><span>Entity details</span><button className="icon-button destructive" disabled={project.draft!.model.entities.length === 1} aria-label={`Remove ${entity.name}`} onClick={() => updateModel(model => {
                 const removed = model.entities[entityIndex];
                 model.entities.splice(entityIndex, 1);
                 model.relationships = model.relationships.filter(item => item.fromEntityId !== removed.id && item.toEntityId !== removed.id);
@@ -231,7 +267,7 @@ export function ModelWorkbench() {
                 model.entities.forEach(item => item.attributes.forEach(attribute => {
                   if (attribute.references?.entityId === removed.id) { attribute.key = 'NONE'; attribute.references = null; }
                 }));
-              })}>×</button></div>
+              })}><Icon name="trash" /></button></div>
               <label>Name<input aria-label={`Entity name ${entity.name}`} value={entity.name} onChange={event => updateModel(model => { model.entities[entityIndex].name = event.target.value; })} /></label>
               <label>Business definition<textarea aria-label={`${entity.name} business definition`} value={entity.businessDefinition} onChange={event => updateModel(model => { model.entities[entityIndex].businessDefinition = event.target.value; })} rows={2} /></label>
               <div className="position-fields">
@@ -258,31 +294,35 @@ export function ModelWorkbench() {
                     model.entities[entityIndex].attributes[attributeIndex].references = { entityId, attributeId };
                   })}>{foreignKeyTargets.filter(target => target.value !== `${entity.id}:${attribute.id}`).map(target => <option value={target.value} key={target.value}>{target.label}</option>)}</select> : <span className="no-reference">—</span>}
                   <input aria-label={`${attribute.name} required`} type="checkbox" checked={attribute.required} onChange={event => updateModel(model => { model.entities[entityIndex].attributes[attributeIndex].required = event.target.checked; })} />
-                  <button className="icon-button" aria-label={`Remove attribute ${attribute.name}`} onClick={() => updateModel(model => {
+                  <button className="icon-button destructive" aria-label={`Remove attribute ${attribute.name}`} onClick={() => updateModel(model => {
                     const removed = model.entities[entityIndex].attributes[attributeIndex];
                     model.entities[entityIndex].attributes.splice(attributeIndex, 1);
                     model.entities.forEach(item => item.attributes.forEach(candidate => {
                       if (candidate.references?.attributeId === removed.id) { candidate.key = 'NONE'; candidate.references = null; }
                     }));
-                  })}>×</button>
+                  })}><Icon name="trash" /></button>
                 </div><input className="attribute-definition" aria-label={`${entity.name} ${attribute.name} definition`} value={attribute.businessDefinition} onChange={event => updateModel(model => { model.entities[entityIndex].attributes[attributeIndex].businessDefinition = event.target.value; })} placeholder="Business definition" /></div>)}
               </div>
-              <button className="text-button" onClick={() => updateModel(model => { const attributes = model.entities[entityIndex].attributes; attributes.push({ id: crypto.randomUUID(), name: `new_attribute_${attributes.length + 1}`, dataType: 'varchar', required: false, key: 'NONE', references: null, businessDefinition: 'Define this attribute.' }); })}>+ Add attribute</button>
-            </article>)}</div>
-            <button className="secondary-button add-entity" onClick={() => updateModel(model => { const ordinal = model.entities.length + 1; model.entities.push({ id: crypto.randomUUID(), name: `New Entity ${ordinal}`, businessDefinition: 'Define this entity.', position: { x: 80 + model.entities.length * 360, y: 360 }, attributes: [{ id: crypto.randomUUID(), name: 'id', dataType: 'uuid', required: true, key: 'PK', references: null, businessDefinition: 'Stable identifier.' }] }); })}>+ Add entity</button>
+              <button className="text-button" onClick={() => updateModel(model => { const attributes = model.entities[entityIndex].attributes; attributes.push({ id: crypto.randomUUID(), name: `new_attribute_${attributes.length + 1}`, dataType: 'varchar', required: false, key: 'NONE', references: null, businessDefinition: 'Define this attribute.' }); })}><Icon name="plus" />Add attribute</button>
+            </div></details>)}</div>
+            <button className="secondary-button add-entity" onClick={() => {
+              const id = crypto.randomUUID();
+              updateModel(model => { const ordinal = model.entities.length + 1; model.entities.push({ id, name: `New Entity ${ordinal}`, businessDefinition: 'Define this entity.', position: { x: 80 + model.entities.length * 360, y: 360 }, attributes: [{ id: crypto.randomUUID(), name: 'id', dataType: 'uuid', required: true, key: 'PK', references: null, businessDefinition: 'Stable identifier.' }] }); });
+              setExpandedEntities(current => new Set(current).add(id));
+            }}><Icon name="plus" />Add entity</button>
 
-            <div className="relationship-editor"><h3>Relationships</h3>{project.draft.model.relationships.map((relationship, index) => <div className="relationship-row" key={relationship.id}>
+            <div className="relationship-editor"><div className="editor-group-heading"><div><h3>Relationships</h3><p>Connect entities and make cardinality explicit.</p></div></div><div className="relationship-labels"><span>Name</span><span>From</span><span>Cardinality</span><span /><span>To</span><span>Cardinality</span><span /></div>{project.draft.model.relationships.map((relationship, index) => <div className="relationship-row" key={relationship.id}>
               <input aria-label={`Relationship ${index + 1} name`} value={relationship.name} onChange={event => updateModel(model => { model.relationships[index].name = event.target.value; })} />
               <select aria-label={`Relationship ${index + 1} source`} value={relationship.fromEntityId} onChange={event => updateModel(model => { model.relationships[index].fromEntityId = event.target.value; })}>{project.draft!.model.entities.map(entity => <option value={entity.id} key={entity.id}>{entity.name}</option>)}</select>
               <select aria-label={`Relationship ${index + 1} source cardinality`} value={relationship.fromCardinality} onChange={event => updateModel(model => { model.relationships[index].fromCardinality = event.target.value as typeof relationship.fromCardinality; })}><option value="one">one</option><option value="zero-or-one">zero or one</option><option value="one-or-many">one or many</option><option value="zero-or-many">zero or many</option></select>
               <span>to</span>
               <select aria-label={`Relationship ${index + 1} target`} value={relationship.toEntityId} onChange={event => updateModel(model => { model.relationships[index].toEntityId = event.target.value; })}>{project.draft!.model.entities.map(entity => <option value={entity.id} key={entity.id}>{entity.name}</option>)}</select>
               <select aria-label={`Relationship ${index + 1} target cardinality`} value={relationship.toCardinality} onChange={event => updateModel(model => { model.relationships[index].toCardinality = event.target.value as typeof relationship.toCardinality; })}><option value="one">one</option><option value="zero-or-one">zero or one</option><option value="one-or-many">one or many</option><option value="zero-or-many">zero or many</option></select>
-              <button className="icon-button" aria-label={`Remove relationship ${relationship.name}`} onClick={() => updateModel(model => { model.relationships.splice(index, 1); })}>×</button>
-            </div>)}<button className="text-button editor-add" onClick={() => updateModel(model => model.relationships.push({ id: crypto.randomUUID(), name: `relationship_${model.relationships.length + 1}`, fromEntityId: model.entities[0].id, toEntityId: model.entities[1]?.id ?? model.entities[0].id, fromCardinality: 'one', toCardinality: 'zero-or-many' }))}>+ Add relationship</button></div>
+              <button className="icon-button destructive" aria-label={`Remove relationship ${relationship.name}`} onClick={() => updateModel(model => { model.relationships.splice(index, 1); })}><Icon name="trash" /></button>
+            </div>)}<button className="text-button editor-add" onClick={() => updateModel(model => model.relationships.push({ id: crypto.randomUUID(), name: `relationship_${model.relationships.length + 1}`, fromEntityId: model.entities[0].id, toEntityId: model.entities[1]?.id ?? model.entities[0].id, fromCardinality: 'one', toCardinality: 'zero-or-many' }))}><Icon name="plus" />Add relationship</button></div>
 
-            <div className="rule-editor"><h3>Validation rules</h3>{project.draft.model.rules.map((rule, index) => <article className="rule-row" key={rule.id}>
-              <div className="rule-heading"><strong>Rule {index + 1}</strong><button className="icon-button" aria-label={`Remove rule ${rule.name}`} onClick={() => updateModel(model => { model.rules.splice(index, 1); })}>×</button></div>
+            <div className="rule-editor"><div className="editor-group-heading"><div><h3>Validation rules</h3><p>Keep business constraints beside the model they protect.</p></div></div>{project.draft.model.rules.map((rule, index) => <article className="rule-row" key={rule.id}>
+              <div className="rule-heading"><strong>Rule {String(index + 1).padStart(2, '0')}</strong><button className="icon-button destructive" aria-label={`Remove rule ${rule.name}`} onClick={() => updateModel(model => { model.rules.splice(index, 1); })}><Icon name="trash" /></button></div>
               <div className="rule-fields">
                 <label>Name<input aria-label={`Rule ${index + 1} name`} value={rule.name} onChange={event => updateModel(model => { model.rules[index].name = event.target.value; })} /></label>
                 <label>Expression<input aria-label={`Rule ${index + 1} expression`} value={rule.expression} onChange={event => updateModel(model => { model.rules[index].expression = event.target.value; })} /></label>
@@ -292,20 +332,21 @@ export function ModelWorkbench() {
                 const ids = model.rules[index].entityIds;
                 model.rules[index].entityIds = event.target.checked ? [...new Set([...ids, item.id])] : ids.filter(id => id !== item.id);
               })} />{item.name}</label>)}</fieldset>
-            </article>)}<button className="text-button editor-add" onClick={() => updateModel(model => model.rules.push({ id: crypto.randomUUID(), name: `Rule ${model.rules.length + 1}`, expression: 'Define expression', businessDefinition: 'Define this validation rule.', entityIds: [model.entities[0].id] }))}>+ Add validation rule</button></div>
+            </article>)}<button className="text-button editor-add" onClick={() => updateModel(model => model.rules.push({ id: crypto.randomUUID(), name: `Rule ${model.rules.length + 1}`, expression: 'Define expression', businessDefinition: 'Define this validation rule.', entityIds: [model.entities[0].id] }))}><Icon name="plus" />Add validation rule</button></div>
           </section>
 
-          <section className="panel preview-card">
-            <div className="section-heading"><div><span className="step">04</span><h2>Representations</h2></div><div className="segmented"><button className={preview === 'mermaid' ? 'active' : ''} onClick={() => setPreview('mermaid')}>Mermaid</button><button className={preview === 'drawio' ? 'active' : ''} onClick={() => setPreview('drawio')}>draw.io</button></div></div>
-            {preview === 'mermaid' ? <MermaidPreview source={mermaid} /> : <DiagramPreview model={project.draft.model} />}
-            <details><summary>Canonical JSON · read only</summary><pre className="code-preview">{JSON.stringify(project.draft.model, null, 2)}</pre></details>
-          </section>
+          <div className="preview-rail">
+            <section className="panel preview-card">
+              <div className="section-heading"><div><span className="eyebrow">Live output</span><h2>Representations</h2></div><div className="segmented" aria-label="Preview format"><button aria-pressed={preview === 'mermaid'} className={preview === 'mermaid' ? 'active' : ''} onClick={() => setPreview('mermaid')}>Mermaid</button><button aria-pressed={preview === 'drawio'} className={preview === 'drawio' ? 'active' : ''} onClick={() => setPreview('drawio')}>draw.io</button></div></div>
+              {preview === 'mermaid' ? <MermaidPreview source={mermaid} /> : <DiagramPreview model={project.draft.model} />}
+              <details className="json-details"><summary>Canonical JSON <span>Read only</span></summary><pre className="code-preview">{JSON.stringify(project.draft.model, null, 2)}</pre></details>
+            </section>
 
-          <section className="panel history-card"><div className="section-heading"><div><span className="step">05</span><h2>Version history</h2></div>{latest && <div className="download-actions"><a href={`/api/projects/${project.id}/downloads/mermaid?version=${latest}`}>Download Mermaid v{latest}</a><a href={`/api/projects/${project.id}/downloads/drawio?version=${latest}`}>Download draw.io v{latest}</a></div>}</div>
-            {project.versions.length ? <ol className="version-list">{project.versions.map(version => <li key={version.id}><div><strong>Version {version.versionNumber}</strong><span>{new Date(version.createdAt).toLocaleString()}</span></div><button className="text-button" onClick={() => void continueVersion(version.versionNumber)}>Open as draft</button></li>)}</ol> : <p className="empty-copy">Save the reviewed draft to create version 1.</p>}
-          </section>
-        </> : <section className="panel intake-card"><div className="section-heading"><h2>{project.title}</h2><span className="status-dot">Saved without a draft</span></div><p>The previous generation did not complete. Your requirements and source files are preserved.</p><button className="primary-button" onClick={() => void generate()}>Retry generation <span>→</span></button></section>}
-        {error && <div className="error-banner" role="alert"><strong>Action stopped</strong><span>{error}</span></div>}
+            <section className="panel history-card"><div className="section-heading"><div><span className="eyebrow">Review points</span><h2>Version history</h2></div></div>{latest && <div className="download-actions"><a download={`${downloadStem}-v${latest}.mmd`} href={`/api/projects/${project.id}/downloads/mermaid?version=${latest}`}>Download Mermaid v{latest}</a><a download={`${downloadStem}-v${latest}.drawio`} href={`/api/projects/${project.id}/downloads/drawio?version=${latest}`}>Download draw.io v{latest}</a></div>}
+              {project.versions.length ? <ol className="version-list">{project.versions.map(version => <li key={version.id}><div><strong>Version {version.versionNumber}</strong><span>{new Date(version.createdAt).toLocaleString()}</span></div><button className="text-button" onClick={() => void continueVersion(version.versionNumber)}>Open as draft</button></li>)}</ol> : <p className="empty-copy">Save the reviewed draft to create version 1.</p>}
+            </section>
+          </div>
+        </> : <section className="panel intake-card"><div className="section-heading"><div><span className="eyebrow">Generation incomplete</span><h1>{project.title}</h1></div><span className="status-dot">Saved without a draft</span></div><p>The previous generation did not complete. Your requirements and source files are preserved.</p><button className="primary-button" disabled={busy} onClick={() => void generate()}>Retry generation <Icon name="arrow" /></button></section>}
       </section>
     </div>
   </main>;
