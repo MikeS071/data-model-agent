@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 4
+revision: 5
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -45,6 +45,14 @@ edit its name, requirements and source artifacts before any draft exists, then g
 when the intake is ready. Deleting a project is an explicit confirmed action that removes
 the project and its cascading source, working-draft and version records; cancellation
 must leave all records unchanged.
+
+After a working draft exists, a project-scoped chat shares the workbench with the
+structured model editor. Each user message is sent with the current canonical model and
+bounded recent conversation context. The provider returns both a concise assistant reply
+and a complete proposed canonical draft under structured output; local validation must
+pass before the draft and both chat messages are saved together. The editor remains the
+authoritative, directly editable view, so LLM changes are immediately visible beside the
+conversation that requested them.
 
 Use the project-local UI/UX Pro Max output in
 `design-system/data-model-agent/MASTER.md` as the visual interaction contract. Present the
@@ -103,6 +111,13 @@ sequenceDiagram
   App-->>UI: Draft, assumptions, warnings and next question
   Michal->>UI: Edit structured model
   UI->>App: Autosave edited draft
+  Michal->>UI: Ask project chat to change the model
+  UI->>App: Message plus current project context
+  App->>AI: Current canonical model and bounded chat context
+  AI-->>App: Assistant reply plus complete revised draft
+  App->>Domain: Validate revised canonical model
+  App->>DB: Atomically save chat turn and working draft
+  App-->>UI: Updated model beside assistant reply
   Michal->>UI: Save Version
   App->>DB: Commit immutable snapshot
   App-->>UI: Mermaid and draw.io previews and downloads
@@ -131,8 +146,8 @@ edges.
 
 ## Storage model
 
-Use a project-local SQLite file excluded from Git. Versioned SQL migrations create four
-tables: projects, source_artifacts, working_drafts and model_versions. Canonical models,
+Use a project-local SQLite file excluded from Git. Versioned SQL migrations create five
+tables: projects, source_artifacts, working_drafts, model_messages and model_versions. Canonical models,
 clarification state and generated representations are stored as validated JSON or text;
 timestamps and version numbers are ordinary indexed columns. Foreign keys enforce project
 ownership, and `(project_id, version_number)` is unique.
@@ -142,6 +157,9 @@ Save Version reads the working draft, validates it, renders both formats and ins
 immutable version plus its source snapshot in one transaction. Reopening an old version
 does not mutate it; choosing to continue from it copies its canonical model into the
 working draft. Repository interfaces keep SQLite details out of domain and UI code.
+Project chat messages use ordered user/assistant roles and cascade with project deletion.
+A successful chat turn writes its two messages and revised working draft in one
+transaction; provider or validation failure writes neither.
 
 ## External boundaries
 
@@ -158,6 +176,11 @@ settings are server-only environment values: `OPENAI_TIMEOUT_MS` defaults to 120
 8,000. Invalid settings fail closed before a request. The application does not rely on
 provider output being valid: it parses and validates locally before persistence. Tests
 replace the adapter and never make a network call.
+
+Chat uses a separate structured-output contract over the same provider boundary. It sends
+the current requirements, canonical model, bounded source context, a bounded recent chat
+history and the new message. A chat response must contain a non-empty assistant reply and
+a complete generation result; partial patches are not applied to the canonical model.
 
 SQLite is reachable only through the repository interface. Renderers are pure functions
 over a validated canonical model. Download endpoints derive safe filenames, set explicit
@@ -177,6 +200,9 @@ and non-sensitive runtime settings so a timeout, rate limit, provider rejection 
 incomplete capped response remains distinguishable. UI rendering escapes user-controlled
 text, and generated XML uses an XML-safe encoder. SQLite and local source records are not
 encrypted at rest in this pilot; filesystem access and backup protection remain host responsibilities.
+Chat content is subject to the same local-storage and provider-transmission disclosure as
+requirements and source files. User messages are length-bounded server-side, rendered as
+text, and never interpolated into executable code.
 Production use requires a new request/design covering authentication, authorization,
 retention, encryption, approved provider settings and organisational data controls.
 
@@ -187,9 +213,10 @@ specific correction message. Missing provider configuration disables live Genera
 leaving saved models usable. Provider timeout, rate limit or unavailable responses retain
 the current working draft and offer an explicit retry without creating a version. A
 response stopped by the configured output-token cap is reported as incomplete rather than
-malformed. The synchronous pilot request has a configurable 120-second default deadline;
 streaming or background generation is deferred until representative timings show that the
 interactive request still needs a longer-running job boundary.
+The same typed provider failures apply to chat. A failed, incomplete or invalid chat
+response leaves both the current draft and transcript unchanged, making retry explicit.
 
 Malformed or schema-invalid model output is never stored as a canonical model; validation
 details become a bounded error and may drive a new generation attempt. Domain ambiguity
@@ -204,13 +231,14 @@ human reacceptance.
 Domain unit tests compare the canonical Claim-Payment fixture with literal expected
 entities, attributes, keys, optionality, cardinality, definitions, layout and aggregate
 rules. Input tests cover prose, Markdown, DDL, SQL, JSON, encoding, size limits and the
-rule that DDL is never executed. Provider contract tests use a fake adapter for success,
-ambiguity, invalid structure, timeout, incomplete output, safe diagnostics and missing or
-invalid configuration; a client-bundle check guards against credential leakage.
+rule that DDL is never executed. Provider contract tests use a fake adapter for generation
+and chat success, ambiguity, invalid structure, timeout, incomplete output, safe
+diagnostics and missing or invalid configuration; a client-bundle check guards against
+credential leakage.
 
 Repository integration tests use a temporary SQLite database to prove source retention,
-pre-generation update and delete, autosave, transactional immutable versions, list,
-reopen and continue-from-version.
+pre-generation update and delete, atomic chat-turn persistence, autosave, transactional
+immutable versions, list, reopen and continue-from-version.
 Renderer tests parse Mermaid semantics and draw.io XML and compare both with the same
 canonical fixture. Component tests exercise structured editing and read-only diagnostic
 views. A browser test covers create, generate draft, answer clarification, edit, autosave,
@@ -251,6 +279,7 @@ of scope.
 | D-013 | Use a responsive three-zone enterprise workbench with progressive entity disclosure and a persistent preview rail. | It keeps dense modelling tasks scannable and puts model feedback beside the edit that causes it. | Marketing hero with a single long form; separate editor and preview pages. | The layout stacks at narrower widths and UI tests must cover disclosure, focus, feedback and responsive behavior. |
 | D-014 | Make synchronous OpenAI generation bounds configurable, defaulting to a 120-second timeout, low reasoning effort and 8,000 generated tokens, with typed non-sensitive diagnostics. | The original fixed 45-second deadline aborted valid `gpt-5.6-sol` structured-output work while connectivity and model access were healthy. | Keep the fixed deadline; immediately adopt streaming/background jobs; hard-code a faster model. | Operators can tune latency without source edits; capped incomplete responses fail explicitly; streaming remains a later measured improvement. |
 | D-015 | Treat project intake as a saved lifecycle stage before provider generation, with editable inputs and confirmed project deletion. | A provider failure must not trap a saved project in a read-only retry screen, and users need to prepare work without making a provider call. | Create projects only as a side effect of Generate; require database cleanup for abandoned projects. | The API supports update and delete, deletes cascade transactionally, and the UI distinguishes Save model from Generate draft. |
+| D-016 | Keep a persistent project chat beside the structured model editor and apply only complete, validated LLM revisions. | Users need a conversational way to evolve a built model while seeing the resulting source of truth. | Hide chat on a separate page; apply unvalidated JSON patches; keep chat ephemeral. | Chat turns and revised drafts commit atomically, recent context is bounded, and responsive layouts stack the same two surfaces on narrow screens. |
 
 ## Approval
 
@@ -264,3 +293,7 @@ revision 3 and D-014 without changing request intent or acceptance criteria.
 Michal then explicitly required models to remain editable and deletable before generation.
 That direct feature decision accepts revision 4 and D-015; it advances the lifecycle
 design without changing the accepted modelling intent.
+Michal then explicitly required a chat UI beside the built model so users can ask the LLM
+to update it. That direct feature decision accepts revision 5 and D-016. Persisting the
+project-scoped transcript and applying only complete validated revisions are the safety
+and continuity consequences of that interaction requirement.
