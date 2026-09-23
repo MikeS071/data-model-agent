@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 7
+revision: 8
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -29,8 +29,10 @@ Markdown, DDL, SQL, JSON and schema files as inert text and creates a bounded ge
 context. A replaceable model-provider interface uses the OpenAI Responses API in the real
 adapter and a deterministic fake in tests. The provider is asked for structured JSON;
 the application validates the response again before it can become a working draft.
-`OPENAI_API_KEY` and `OPENAI_MODEL` are server environment settings, so no model choice or
-credential is embedded in browser code or stored records.
+`OPENAI_API_KEY` remains a server environment secret. A Settings view lets Michal choose
+the non-secret base URL and model for an OpenAI-compatible Responses API; those values are
+validated at the server boundary and stored locally so provider choice does not require a
+source edit or expose the credential to browser code.
 
 Use Node's SQLite support behind a repository interface. One mutable working draft is
 autosaved transactionally. An explicit Save Version action creates an immutable snapshot
@@ -60,10 +62,14 @@ immediately visible in the model output and editor.
 Use the project-local UI/UX Pro Max output in
 `design-system/data-model-agent/MASTER.md` as the visual interaction contract. Present the
 application as a calm, data-dense enterprise workbench rather than a marketing page. A
-compact product header exposes local-pilot and save state. Desktop places live model
+compact product header exposes local-pilot and save state. Its Model Foundry brand returns
+to the home intake and is labelled as the Data Model Design Space. Desktop places live model
 output and project chat side by side at the top, followed by the full-width structured
 editor and history; assumptions and warnings form the final review section. Smaller
 screens stack those regions in the same reading order without horizontal page scroll.
+The saved-model workspace is a keyboard-operable collapsible sidebar: collapsing it leaves
+an icon rail and gives the workbench and live output the recovered width. Settings is a
+first-class sidebar destination rather than a hidden environment-only task.
 Entity details use accessible progressive
 disclosure so a large model remains scannable, while relationships, rules, preview,
 downloads and version history remain discoverable. Semantic colors, persistent labels,
@@ -74,6 +80,9 @@ representations use one interactive canvas: a mouse wheel zooms around the point
 primary mouse-button dragging pans the model, and visible zoom/reset controls plus
 focusable arrow and zoom keys provide non-drag alternatives. Switching representation
 resets the viewport so an off-screen pan cannot make the next model appear empty.
+The canvas defaults and resets to 50% scale, can zoom out further for large models, and is
+taller on desktop. Chat messages must shrink within their panel and wrap long tokens rather
+than expanding the collaboration grid or creating horizontal overflow.
 
 ## Alternatives considered
 
@@ -93,7 +102,7 @@ flowchart LR
   Routes --> Service[Application services]
   Service --> Domain[Canonical model and validation]
   Service --> Provider[Model provider interface]
-  Provider --> OpenAI[OpenAI Responses API]
+  Provider --> Compatible[Configured OpenAI-compatible Responses API]
   Service --> Repo[Repository interface]
   Repo --> SQLite[(Local SQLite)]
   Service --> Mermaid[Mermaid renderer]
@@ -109,7 +118,7 @@ sequenceDiagram
   actor Michal
   participant UI as Browser UI
   participant App as Next.js server
-  participant AI as OpenAI adapter
+  participant AI as Configured compatible provider
   participant Domain as Domain validator
   participant DB as SQLite repository
   Michal->>UI: Enter requirements and attach text artifacts
@@ -157,9 +166,9 @@ edges.
 
 ## Storage model
 
-Use a project-local SQLite file excluded from Git. Versioned SQL migrations create five
-tables: projects, source_artifacts, working_drafts, model_messages and model_versions. Canonical models,
-clarification state and generated representations are stored as validated JSON or text;
+Use a project-local SQLite file excluded from Git. Versioned SQL migrations create six
+tables: projects, source_artifacts, working_drafts, model_messages, model_versions and
+provider_settings. Canonical models, clarification state and generated representations are stored as validated JSON or text;
 timestamps and version numbers are ordinary indexed columns. Foreign keys enforce project
 ownership, and `(project_id, version_number)` is unique.
 
@@ -172,6 +181,11 @@ Project chat messages use ordered user/assistant roles and cascade with project 
 A successful chat turn writes its two messages and revised working draft in one
 transaction; provider or validation failure writes neither.
 
+A singleton `provider_settings` row stores only the normalized OpenAI-compatible base URL,
+model name and update timestamp. Environment values supply the initial fallback until the
+user saves settings. The API key is never part of that row. Updating provider settings is
+an idempotent upsert and does not modify projects, drafts, messages or versions.
+
 ## External boundaries
 
 Accept manually entered text plus `.md`, `.txt`, `.sql`, `.ddl` and `.json` files. Treat
@@ -180,9 +194,11 @@ line endings, and reject binaries or malformed encodings. Never execute supplied
 HTML or scripts.
 
 Clicking Generate sends the normalized supplied material directly through the server-only
-OpenAI adapter. The adapter uses the Responses API with a JSON Schema structured-output
-contract, a configured model, bounded timeout and no application tools. Provider runtime
-settings are server-only environment values: `OPENAI_TIMEOUT_MS` defaults to 120 seconds,
+OpenAI-compatible adapter. The adapter appends `/responses` to the validated configured
+base URL and uses a JSON Schema structured-output contract, configured model, bounded
+timeout and no application tools. Base URLs must use HTTP or HTTPS, contain no embedded
+credentials and remain length bounded. Provider runtime settings are server-only
+environment values: `OPENAI_TIMEOUT_MS` defaults to 120 seconds,
 `OPENAI_REASONING_EFFORT` defaults to `low`, and `OPENAI_MAX_OUTPUT_TOKENS` defaults to
 8,000. Invalid settings fail closed before a request. The application does not rely on
 provider output being valid: it parses and validates locally before persistence. Tests
@@ -203,9 +219,11 @@ content types and return only the requested representation.
 
 The pilot has no authentication and therefore binds to the local development host by
 default; it must not be exposed as a shared network service. The UI clearly states that
-Generate sends the supplied material to OpenAI. Provider credentials and model settings
-remain server-side environment variables and are never persisted, serialized into page
-props or included in browser bundles.
+Generate and chat send the supplied material to the configured provider. The API key
+remains a server-side environment variable and is never persisted, serialized into page
+props or included in browser bundles. The non-secret base URL and model are visible and
+editable in Settings; changing them affects the next provider request and never migrates
+or retransmits stored model data by itself.
 
 Logs contain request IDs, durations and typed error categories, not source content,
 prompts, provider responses or secrets. Provider diagnostics record the configured model
@@ -228,7 +246,10 @@ the current working draft and offer an explicit retry without creating a version
 response stopped by the configured output-token cap is reported as incomplete rather than
 streaming or background generation is deferred until representative timings show that the
 interactive request still needs a longer-running job boundary.
-The same typed provider failures apply to chat. A failed, incomplete or invalid chat
+An invalid provider base URL or blank model is rejected inline without changing the saved
+settings. A configured endpoint that does not support the expected Responses API fails as
+a typed provider error while saved work remains available. The same typed provider
+failures apply to chat. A failed, incomplete or invalid chat
 response leaves both the current draft and transcript unchanged, making retry explicit.
 
 Malformed or schema-invalid model output is never stored as a canonical model; validation
@@ -247,15 +268,16 @@ entities, attributes, keys, optionality, cardinality, definitions, layout and ag
 rules. Input tests cover prose, Markdown, DDL, SQL, JSON, encoding, size limits and the
 rule that DDL is never executed. Provider contract tests use a fake adapter for generation
 and chat success, ambiguity, invalid structure, timeout, incomplete output, safe
-diagnostics and missing or invalid configuration; a client-bundle check guards against
-credential leakage.
+diagnostics, configured base URL/model selection and missing or invalid configuration; a
+client-bundle check guards against credential leakage.
 
 Repository integration tests use a temporary SQLite database to prove source retention,
 pre-generation update and delete, atomic chat-turn persistence, autosave, transactional
 immutable versions, list, reopen and continue-from-version.
 Renderer tests parse Mermaid semantics and draw.io XML and compare both with the same
 canonical fixture. Component tests exercise structured editing, read-only diagnostic
-views and the accessible zoom controls. A browser test covers create, generate draft,
+views, settings, collapsible navigation, chat wrapping and the accessible zoom controls.
+A browser test covers create, generate draft,
 mouse-wheel zoom, drag pan, keyboard/reset alternatives, answer clarification, edit,
 autosave, save version, reopen, preview and download. The configured project unit and
 production build commands run on the exact candidate. Final verification maps independent
@@ -289,7 +311,7 @@ of scope.
 | D-008 | Require structured provider output and validate it locally. | Provider formatting alone is not a trust boundary. | Accept prose or unchecked JSON. | Invalid responses fail closed and may require retry. |
 | D-009 | Treat all uploaded artifacts as inert bounded UTF-8 text. | It supports the requested inputs without executing untrusted content. | Execute or deeply parse arbitrary DDL. | Initial semantic extraction depends on the model and validation. |
 | D-010 | Bind the unauthenticated pilot locally and make no shared-service claim. | Single-user scope does not justify an authorization system. | Add authentication now. | Network deployment requires a new accepted design. |
-| D-011 | Require the OpenAI model to be an environment setting. | Model choice can change without source edits. | Hard-code a model. | Startup must report missing configuration clearly. |
+| D-011 | Use the environment model as the initial server-side default. | Model choice starts configurable without being embedded in source. | Hard-code a model. | A saved D-019 setting supersedes the default, and missing effective configuration is reported clearly. |
 | D-012 | Store generated representations with each immutable version. | Reopened versions retain the exact reviewed outputs. | Regenerate every historical view. | Version storage is larger but deterministic review is simpler. |
 | D-013 | Use a responsive three-zone enterprise workbench with progressive entity disclosure and a persistent preview rail. | It keeps dense modelling tasks scannable and puts model feedback beside the edit that causes it. | Marketing hero with a single long form; separate editor and preview pages. | The layout stacks at narrower widths and UI tests must cover disclosure, focus, feedback and responsive behavior. |
 | D-014 | Make synchronous OpenAI generation bounds configurable, defaulting to a 120-second timeout, low reasoning effort and 8,000 generated tokens, with typed non-sensitive diagnostics. | The original fixed 45-second deadline aborted valid `gpt-5.6-sol` structured-output work while connectivity and model access were healthy. | Keep the fixed deadline; immediately adopt streaming/background jobs; hard-code a faster model. | Operators can tune latency without source edits; capped incomplete responses fail explicitly; streaming remains a later measured improvement. |
@@ -297,6 +319,8 @@ of scope.
 | D-016 | Keep a persistent project chat beside the structured model editor and apply only complete, validated LLM revisions. | Users need a conversational way to evolve a built model while seeing the resulting source of truth. | Hide chat on a separate page; apply unvalidated JSON patches; keep chat ephemeral. | Chat turns and revised drafts commit atomically, recent context is bounded, and responsive layouts stack the same two surfaces on narrow screens. |
 | D-017 | Make live output and chat the top collaboration row, handle clarification as a chat workflow, place the structured editor below, and leave assumptions and warnings until the bottom review section. | The user should see the model change beside the conversation driving it, while detailed editing and residual review information follow the main task flow. | Keep a separate clarification form; lead with assumptions and warnings; retain the editor-plus-preview-rail layout. | Chat requests include the pending question, successful answers update the complete validated draft, keyboard order follows visual order, and narrow screens stack output, chat, editor, history and review in that sequence. All buttons use one typographic and sizing system. |
 | D-018 | Wrap Mermaid and draw.io in one bounded interactive canvas with pointer-centred wheel zoom, drag panning, visible zoom/reset buttons and keyboard equivalents. | Large insurance models must remain inspectable without page-level overflow, while dragging cannot be the only way to navigate. | Keep scrollbars only; add interaction to just one representation; depend on a diagramming library. | Both formats share identical viewport behavior, scale is bounded, mode changes reset the view, controls have accessible names, and browser tests exercise real mouse and keyboard input. |
+| D-019 | Persist a validated non-secret base URL and model for an OpenAI-compatible Responses API while keeping the API key environment-only. | Selecting another compatible provider must not require source edits or put credentials in the browser/database. | Keep all settings environment-only; store API keys in SQLite; implement multiple provider-specific adapters now. | Settings affect subsequent requests, use an idempotent singleton row, clearly disclose the configured destination, and reject invalid URLs/models without overwriting the last valid values. |
+| D-020 | Use a collapsible workspace navigation rail, make the brand a home action, enlarge the visualization, reset it to 50%, and constrain chat content to the panel. | The model is the primary work surface and should gain space without sacrificing discoverable navigation or readable conversation. | Keep the permanent 240px panel; hide navigation entirely; add a separate route for every view. | Desktop collapse state remains local UI state with labelled icon controls, narrow screens keep a full-width menu, the live-output column receives the recovered width, and long user/provider content wraps without page overflow. |
 
 ## Approval
 
@@ -323,3 +347,8 @@ Michal then explicitly required the model visualisation to zoom and move with a 
 That direct interaction decision accepts revision 7 and D-018. Accessible buttons and
 keyboard navigation are required alternatives to the mouse gestures and do not expand
 the modelling or provider scope.
+Michal then explicitly required selectable provider base-URL settings, a settings panel,
+a collapsible workspace menu, a larger 50%-default canvas, bounded chat messages and a
+clickable home brand labelled Data Model Design Space. That direct feature decision
+accepts revision 8 with D-019 and D-020. The API key remains server-only, and compatibility
+is limited to providers implementing the expected OpenAI Responses API contract.

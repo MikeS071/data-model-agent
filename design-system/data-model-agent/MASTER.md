@@ -19,8 +19,11 @@ typography guidance with the matched Data-Dense Dashboard and Minimalism & Swiss
 ## Layout
 
 - Use a compact product header for identity, pilot status and current save state.
-- At desktop widths, keep the 240px model navigation and use the flexible work area for a
-  two-column collaboration row: live model output in the main column and chat beside it.
+- At desktop widths, use a 240px collapsible model-navigation sidebar and a 72px labelled
+  icon rail when collapsed. Give the recovered width to the work area and favor the live
+  model output over chat in the expanded collaboration row.
+- Keep Home/New model, Settings and collapse actions keyboard operable and visibly focused.
+  On narrow screens use the full-width menu rather than an ambiguous icon-only rail.
 - Keep the current model title and version actions visible at the top of the work area.
 - Treat the next clarification as a guided assistant message in chat; its answer updates
   the same canonical model as any other conversational change.
@@ -82,6 +85,9 @@ on color alone.
   pointer and primary mouse-button drag pans the model; bound zoom to a useful range and show a
   compact percentage, zoom-in, zoom-out and reset toolbar. The canvas is focusable and
   supports arrow-key panning plus `+`, `-` and `0` so drag is never the only interaction.
+- The visualization defaults and resets to 50% and uses a taller desktop viewport. Chat
+  bubbles have a shrinkable inline size and wrap long tokens with `overflow-wrap: anywhere`
+  so generated text can never widen its panel.
 - Use a `grab` cursor at rest and `grabbing` while panning, suppress text selection during
   a drag, and reset the viewport when the representation changes.
 - Hover and focus transitions use 150–200ms. Never move layout on hover.
