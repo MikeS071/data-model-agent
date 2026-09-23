@@ -526,7 +526,7 @@ export function ModelWorkbench() {
                   : project.messages.length === 0 && <li className="chat-empty">No open questions. Try “Add recovery transactions and explain the relationship.”</li>}
                 {pendingChatMessage && <>
                   <li className="chat-message user pending" key={pendingChatMessage.id}><span>You</span><p className="chat-message-body">{pendingChatMessage.content}</p></li>
-                  <li className="chat-message assistant thinking" key={`${pendingChatMessage.id}-thinking`}><span>Assistant</span><p className="chat-message-body">Thinking...</p></li>
+                  <li className="chat-message assistant thinking" key={`${pendingChatMessage.id}-thinking`}><span>Assistant</span><p className="chat-message-body thinking-copy"><span className="thinking-status">Thinking...</span><span className="thinking-visible" aria-hidden="true">Thinking<span className="thinking-dots"><i /><i /><i /></span></span></p></li>
                 </>}
               </ol>
               <label>{project.draft.clarificationQuestions[0] ? 'Answer or request a change' : 'Message'}<textarea aria-label="Message the model assistant" value={chatMessage} maxLength={4000} rows={3} onChange={event => setChatMessage(event.target.value)} placeholder={project.draft.clarificationQuestions[0] ? 'Answer the question or describe another change…' : 'Describe the change you want…'} /></label>

@@ -179,6 +179,7 @@ describe('Michal modelling workflow', () => {
     await user.click(screen.getByRole('button', { name: 'Send message' }));
     expect(screen.getByText('Add a recovery transaction.')).toBeTruthy();
     expect(screen.getByText('Thinking...')).toBeTruthy();
+    expect(document.querySelectorAll('.thinking-dots i')).toHaveLength(3);
     expect((composer as HTMLTextAreaElement).disabled).toBe(false);
     expect((composer as HTMLTextAreaElement).value).toBe('');
     await user.type(composer, 'Draft the next request.');

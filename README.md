@@ -17,8 +17,8 @@ The first worked example models Claim and Payment for a large insurance organisa
   changes; successful answers update the canonical draft.
 - Keep the original requirements editable as **Persistent model instructions** that
   ground every later regeneration and assistant turn.
-- Read the complete scrollable project conversation while long assistant replies remain
-  contained in their own ten-line scroll area.
+- Read the complete scrollable project conversation while long human, assistant and
+  clarification messages remain contained in their own ten-line scroll area.
 - Edit model definitions, entities, attributes, keys, references, layout, relationships
   and validation rules in structured forms.
 - Edit the canonical structure below the live output, then review assumptions and

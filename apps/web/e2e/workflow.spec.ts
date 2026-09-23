@@ -6,6 +6,18 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   let created = false;
   let firstChatRequirements = '';
   let providerSettings = { baseUrl: 'https://api.openai.com/v1', model: 'environment-model', apiKeyConfigured: true };
+  const longClarificationQuestion = [
+    'Should an external payment reference be unique?',
+    ...Array.from({ length: 11 }, (_, index) => `Clarification context ${index + 1}: confirm the platform boundary.`),
+  ].join('\n');
+  const longClarificationAnswer = [
+    'Yes, within the payment platform.',
+    ...Array.from({ length: 11 }, (_, index) => `Answer detail ${index + 1}: preserve the audit trail.`),
+  ].join('\n');
+  const longHumanRequest = [
+    'Add recovery transactions.',
+    ...Array.from({ length: 11 }, (_, index) => `Requirement ${index + 1}: retain recovery provenance.`),
+  ].join('\n');
   const longAssistantReply = [
     'I added recovery transactions and updated the model definition.',
     ...Array.from({ length: 12 }, (_, index) => `Review note ${index + 1}: recovery detail ${'x'.repeat(48)}`),
@@ -58,7 +70,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     if (path.endsWith('/generate') && method === 'POST') {
       generationCount += 1;
       project.draft = generationCount === 1
-        ? { ...structuredClone(generatedClaimPayment), warnings: ['Confirm whether external payment references must be unique.'], clarificationQuestions: ['Should an external payment reference be unique?'] }
+        ? { ...structuredClone(generatedClaimPayment), warnings: ['Confirm whether external payment references must be unique.'], clarificationQuestions: [longClarificationQuestion] }
         : structuredClone(generatedClaimPayment);
       return json(project);
     }
@@ -141,7 +153,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
 
   await expect(page.getByRole('heading', { name: 'Claim Payment model' })).toBeVisible();
   await expect(page.getByText('A claim uses one currency for approval and payments.')).toBeVisible();
-  await expect(page.getByText('Should an external payment reference be unique?')).toBeVisible();
+  await expect(page.getByText(/Should an external payment reference be unique\?/u)).toBeVisible();
   await expect(page.locator('.mermaid-preview svg')).toBeVisible();
   const liveOutput = page.getByRole('region', { name: 'Live model output' });
   const outputWidthBeforeCollapse = (await liveOutput.boundingBox())!.width;
@@ -193,21 +205,37 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   expect(outputBox && chatBox && editorBox && editorBox.y >= Math.max(outputBox.y + outputBox.height, chatBox.y + chatBox.height) - 1).toBeTruthy();
   expect(editorBox && reviewBox && reviewBox.y >= editorBox.y + editorBox.height - 1).toBeTruthy();
 
+  const clarificationMessage = page.locator('.chat-message.clarification-prompt');
+  const clarificationBody = clarificationMessage.locator('.chat-message-body');
+  await expect.poll(async () => clarificationBody.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  expect(await clarificationBody.evaluate(element => getComputedStyle(element).overflowY)).toBe('auto');
+  expect(await clarificationBody.evaluate(element => element.clientHeight / Number.parseFloat(getComputedStyle(element).lineHeight))).toBeCloseTo(10, 1);
+  await expect.poll(async () => (await clarificationMessage.boundingBox())!.height).toBeGreaterThan(200);
+
   await expect(page.getByLabel('Persistent model instructions')).toHaveValue('Model claim payments for a large insurance organisation.');
   await page.getByLabel('Persistent model instructions').fill('Model claim payments with a complete auditable payment history.');
 
-  await page.getByLabel('Message the model assistant').fill('Yes, within the payment platform.');
+  await page.getByLabel('Message the model assistant').fill(longClarificationAnswer);
   await page.getByRole('button', { name: 'Send message' }).click();
-  await expect(page.getByText('Yes, within the payment platform.')).toBeVisible();
-  await expect(page.getByText('Thinking...')).toBeVisible();
+  await expect(page.locator('.chat-message.user.pending .chat-message-body')).toContainText('Yes, within the payment platform.');
+  await expect(page.locator('.chat-message.thinking')).toBeVisible();
+  await expect(page.locator('.thinking-dots i')).toHaveCount(3);
+  expect(await page.locator('.chat-message.thinking').evaluate(element => getComputedStyle(element).animationName)).not.toBe('none');
+  expect(await page.locator('.thinking-dots i').first().evaluate(element => getComputedStyle(element).animationName)).not.toBe('none');
   await expect(page.getByLabel('Message the model assistant')).toBeEnabled();
   await page.getByLabel('Message the model assistant').fill('Draft the next request.');
   await expect(page.getByText('I applied the uniqueness requirement and cleared the question.')).toBeVisible();
   expect(firstChatRequirements).toBe('Model claim payments with a complete auditable payment history.');
   await expect(page.getByText('Thinking...')).toHaveCount(0);
   await expect(page.getByLabel('Message the model assistant')).toHaveValue('Draft the next request.');
-  await expect(page.getByText('Should an external payment reference be unique?')).toHaveCount(0);
+  await expect(page.locator('.chat-message.clarification-prompt')).toHaveCount(0);
   await expect(page.getByLabel('Canonical model business definition')).toHaveValue('Tracks claim payments with unique platform references.');
+  const clarificationAnswer = page.locator('.chat-message.user').first();
+  const clarificationAnswerBody = clarificationAnswer.locator('.chat-message-body');
+  await expect.poll(async () => clarificationAnswerBody.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  expect(await clarificationAnswerBody.evaluate(element => getComputedStyle(element).overflowY)).toBe('auto');
+  expect(await clarificationAnswerBody.evaluate(element => element.clientHeight / Number.parseFloat(getComputedStyle(element).lineHeight))).toBeCloseTo(10, 1);
+  await expect.poll(async () => (await clarificationAnswer.boundingBox())!.height).toBeGreaterThan(200);
 
   const entityName = page.getByLabel('Entity name Claim');
   await entityName.fill('Insurance Claim');
@@ -220,20 +248,36 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await page.getByText(/Canonical JSON/u).click();
   await expect(page.locator('pre').filter({ hasText: 'Insurance Claim' })).toBeVisible();
 
-  await page.getByLabel('Message the model assistant').fill('Add recovery transactions.');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.getByLabel('Message the model assistant').fill(longHumanRequest);
   await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.locator('.chat-message.thinking')).toBeVisible();
+  expect(await page.locator('.chat-message.thinking').evaluate(element => getComputedStyle(element).animationName)).toBe('none');
+  expect(await page.locator('.thinking-dots i').first().evaluate(element => getComputedStyle(element).animationName)).toBe('none');
   await expect(page.getByText(/I added recovery transactions and updated the model definition/u)).toBeVisible();
   await expect(page.getByLabel('Canonical model business definition')).toHaveValue('Tracks claims, payments and recovery transactions.');
+  const latestUserMessage = page.locator('.chat-message.user').last();
+  const latestUserBody = latestUserMessage.locator('.chat-message-body');
   const latestAssistantMessage = page.locator('.chat-message.assistant').last();
   const latestAssistantBody = latestAssistantMessage.locator('.chat-message-body');
+  await expect.poll(async () => latestUserBody.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
   await expect.poll(async () => latestAssistantBody.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  expect(await latestUserBody.evaluate(element => getComputedStyle(element).overflowY)).toBe('auto');
   expect(await latestAssistantBody.evaluate(element => getComputedStyle(element).overflowY)).toBe('auto');
-  expect(await page.locator('.chat-transcript').evaluate(element => getComputedStyle(element).overflowY)).toBe('auto');
+  expect(await latestUserBody.evaluate(element => element.clientHeight / Number.parseFloat(getComputedStyle(element).lineHeight))).toBeCloseTo(10, 1);
+  expect(await latestAssistantBody.evaluate(element => element.clientHeight / Number.parseFloat(getComputedStyle(element).lineHeight))).toBeCloseTo(10, 1);
+  await expect.poll(async () => (await latestUserMessage.boundingBox())!.height).toBeGreaterThan(200);
+  await expect.poll(async () => (await latestAssistantMessage.boundingBox())!.height).toBeGreaterThan(200);
+  const transcript = page.locator('.chat-transcript');
+  expect(await transcript.evaluate(element => getComputedStyle(element).overflowY)).toBe('auto');
+  await expect.poll(async () => transcript.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  await expect.poll(async () => transcript.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
   await expect.poll(async () => {
     const messageBox = await latestAssistantMessage.boundingBox(), currentChatBox = await chat.boundingBox();
     return Boolean(messageBox && currentChatBox && messageBox.x + messageBox.width <= currentChatBox.x + currentChatBox.width + 1);
   }).toBe(true);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
 
   const buttonTypography = await page.locator('.app-shell button').evaluateAll(buttons => buttons.map(button => {
     const style = getComputedStyle(button);
