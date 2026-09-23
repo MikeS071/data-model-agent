@@ -2,11 +2,25 @@ import { normalizeSourceArtifacts } from '@/domain/input';
 import { parseGenerationResult, parseRevisionResult } from '@/domain/model';
 import type { GenerationResult, SourceArtifactInput } from '@/domain/model';
 import type { ModelProvider } from '@/provider/model-provider';
+import type { ProviderSettings } from '@/domain/provider-settings';
 import type { ModelVersion, ProjectRecord } from '@/storage/sqlite-repository';
 import { SqliteModelRepository } from '@/storage/sqlite-repository';
 
 export class ModelService {
-  constructor(readonly repository: SqliteModelRepository, readonly provider: ModelProvider) {}
+  constructor(
+    readonly repository: SqliteModelRepository,
+    readonly provider: ModelProvider,
+    readonly providerDefaults: ProviderSettings,
+    readonly apiKeyConfigured: boolean,
+  ) {}
+
+  getProviderSettings() {
+    return { ...this.repository.getProviderSettings(this.providerDefaults), apiKeyConfigured: this.apiKeyConfigured };
+  }
+
+  saveProviderSettings(input: ProviderSettings) {
+    return { ...this.repository.saveProviderSettings(input), apiKeyConfigured: this.apiKeyConfigured };
+  }
 
   createProject(input: { title: string; requirements: string; sources: SourceArtifactInput[] }): ProjectRecord {
     const requirements = input.requirements.trim();

@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { chatWithModel, createProject, deleteProject, downloadVersion, generateDraft, listProjects, saveVersion, updateProject } from '@/server/http';
+import { chatWithModel, createProject, deleteProject, downloadVersion, generateDraft, getProviderSettings, listProjects, saveProviderSettings, saveVersion, updateProject } from '@/server/http';
 import { ModelService } from '@/application/model-service';
 import type { ModelProvider } from '@/provider/model-provider';
 import { SqliteModelRepository } from '@/storage/sqlite-repository';
 import { claimSources, generatedClaimPayment } from '../fixtures/claim-payment';
+import { DEFAULT_PROVIDER_BASE_URL } from '@/domain/provider-settings';
 
 const directories: string[] = [];
 afterEach(() => { while (directories.length) rmSync(directories.pop()!, { recursive: true, force: true }); });
@@ -18,7 +19,7 @@ function harness() {
     async generate() { return structuredClone(generatedClaimPayment); },
     async revise() { return { ...structuredClone(generatedClaimPayment), assistantMessage: 'The model now includes recovery transactions.' }; },
   };
-  return { repository, service: new ModelService(repository, provider) };
+  return { repository, service: new ModelService(repository, provider, { baseUrl: DEFAULT_PROVIDER_BASE_URL, model: 'test-model' }, true) };
 }
 
 describe('project HTTP boundary', () => {
@@ -91,6 +92,29 @@ describe('project HTTP boundary', () => {
       expect.objectContaining({ role: 'user', content: 'Add recovery transactions.' }),
       expect.objectContaining({ role: 'assistant', content: 'The model now includes recovery transactions.' }),
     ]);
+    repository.close();
+  });
+
+  it('reads and saves provider settings without returning a credential', async () => {
+    const { repository, service } = harness();
+    expect(await (await getProviderSettings(service)).json()).toEqual({
+      baseUrl: 'https://api.openai.com/v1', model: 'test-model', apiKeyConfigured: true,
+    });
+    const response = await saveProviderSettings(new Request('http://local/api/settings/provider', {
+      method: 'PUT', body: JSON.stringify({ baseUrl: 'https://models.example/v1/', model: 'claims-model' }),
+    }), service);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      baseUrl: 'https://models.example/v1', model: 'claims-model', apiKeyConfigured: true,
+    });
+    const invalid = await saveProviderSettings(new Request('http://local/api/settings/provider', {
+      method: 'PUT', body: JSON.stringify({ baseUrl: 'ftp://models.example/v1', model: 'replacement' }),
+    }), service);
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: 'provider-settings-invalid' });
+    expect(await (await getProviderSettings(service)).json()).toEqual({
+      baseUrl: 'https://models.example/v1', model: 'claims-model', apiKeyConfigured: true,
+    });
     repository.close();
   });
 });

@@ -18,6 +18,7 @@ interface Project {
   id: string; title: string; requirements: string; createdAt: string; updatedAt: string;
   sources: SourceArtifact[]; draft: GenerationResult | null; versions: VersionSummary[]; messages: ChatMessage[];
 }
+interface ProviderSettingsView { baseUrl: string; model: string; apiKeyConfigured: boolean }
 
 const emptyDraft = { title: '', requirements: '', sources: [] as SourceArtifactInput[] };
 const sourceKind = (name: string): SourceKind | null => {
@@ -26,11 +27,12 @@ const sourceKind = (name: string): SourceKind | null => {
     : extension === 'json' ? 'json' : extension === 'txt' ? 'text' : null;
 };
 const errorMessages: Record<string, string> = {
-  'provider-timeout': 'OpenAI did not finish within the configured time. Your model is saved; retry or increase OPENAI_TIMEOUT_MS.',
-  'provider-output-incomplete': 'OpenAI reached the configured output limit before completing the model. Increase OPENAI_MAX_OUTPUT_TOKENS and retry.',
-  'provider-rate-limited': 'OpenAI is rate limiting requests. Your model is saved; wait briefly and retry.',
-  'provider-not-configured': 'OpenAI is not configured. Add the server-side API key and model settings, then restart the server.',
-  'provider-config-invalid': 'An OpenAI runtime setting is invalid. Check the server environment and restart the server.',
+  'provider-timeout': 'The provider did not finish within the configured time. Your model is saved; retry or increase OPENAI_TIMEOUT_MS.',
+  'provider-output-incomplete': 'The provider reached the configured output limit before completing the model. Increase OPENAI_MAX_OUTPUT_TOKENS and retry.',
+  'provider-rate-limited': 'The provider is rate limiting requests. Your model is saved; wait briefly and retry.',
+  'provider-not-configured': 'The provider is not configured. Add the server-side API key and model settings, then restart the server.',
+  'provider-config-invalid': 'A provider runtime setting is invalid. Check the server environment and restart the server.',
+  'provider-settings-invalid': 'Enter a valid HTTP(S) base URL without credentials, query text or a fragment, and a model name.',
 };
 const message = (error: unknown) => error instanceof Error ? errorMessages[error.message] ?? error.message : 'Something went wrong.';
 
@@ -84,23 +86,25 @@ function DiagramPreview({ model }: { model: CanonicalModel }) {
   </svg>;
 }
 
-type IconName = 'arrow' | 'chevron' | 'database' | 'minus' | 'plus' | 'reset' | 'shield' | 'trash';
+type IconName = 'arrow' | 'chevron' | 'database' | 'menu' | 'minus' | 'plus' | 'reset' | 'settings' | 'shield' | 'trash';
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
     arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
     chevron: <path d="m8 10 4 4 4-4" />,
     database: <><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></>,
+    menu: <><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></>,
     minus: <path d="M5 12h14" />,
     plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
     reset: <><path d="M4 12a8 8 0 1 0 2.3-5.7" /><path d="M4 4v6h6" /></>,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.12.37.33.7.6 1 .3.3.68.42 1.1.4H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z" /></>,
     shield: <path d="M12 3 5 6v5c0 4.6 2.9 8.1 7 10 4.1-1.9 7-5.4 7-10V6l-7-3Z" />,
     trash: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="m7 7 1 13h8l1-13" /></>,
   };
   return <svg className="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-const MODEL_VIEW_DEFAULT = { scale: 1, x: 0, y: 0 };
-const clampScale = (value: number) => Math.min(2.5, Math.max(.5, Math.round(value * 1000) / 1000));
+const MODEL_VIEW_DEFAULT = { scale: .5, x: 0, y: 0 };
+const clampScale = (value: number) => Math.min(2.5, Math.max(.25, Math.round(value * 1000) / 1000));
 
 function InteractiveModelCanvas({ children }: { children: ReactNode }) {
   const canvas = useRef<HTMLDivElement>(null);
@@ -129,12 +133,12 @@ function InteractiveModelCanvas({ children }: { children: ReactNode }) {
     return () => target.removeEventListener('wheel', handleWheel);
   }, []);
 
-  const zoomFromCentre = (factor: number) => {
+  const zoomFromCentre = (delta: number) => {
     const rect = canvas.current?.getBoundingClientRect();
     const anchorX = rect ? rect.width / 2 : 0;
     const anchorY = rect ? rect.height / 2 : 0;
     setView(current => {
-      const scale = clampScale(current.scale * factor);
+      const scale = clampScale(current.scale + delta);
       return {
         scale,
         x: anchorX - ((anchorX - current.x) / current.scale) * scale,
@@ -170,8 +174,8 @@ function InteractiveModelCanvas({ children }: { children: ReactNode }) {
     else if (event.key === 'ArrowRight') setView(current => ({ ...current, x: current.x + pan }));
     else if (event.key === 'ArrowUp') setView(current => ({ ...current, y: current.y - pan }));
     else if (event.key === 'ArrowDown') setView(current => ({ ...current, y: current.y + pan }));
-    else if (event.key === '+' || event.key === '=') zoomFromCentre(1.25);
-    else if (event.key === '-') zoomFromCentre(.8);
+    else if (event.key === '+' || event.key === '=') zoomFromCentre(.25);
+    else if (event.key === '-') zoomFromCentre(-.25);
     else if (event.key === '0') setView(MODEL_VIEW_DEFAULT);
     else return;
     event.preventDefault();
@@ -181,9 +185,9 @@ function InteractiveModelCanvas({ children }: { children: ReactNode }) {
     <div className="canvas-toolbar">
       <span className="canvas-help" id="model-canvas-help">Scroll to zoom · drag to move · arrow keys to pan</span>
       <div className="canvas-controls">
-        <button className="canvas-control" type="button" aria-label="Zoom out" onClick={() => zoomFromCentre(.8)}><Icon name="minus" /></button>
+        <button className="canvas-control" type="button" aria-label="Zoom out" onClick={() => zoomFromCentre(-.25)}><Icon name="minus" /></button>
         <output aria-label="Zoom level" aria-live="polite">{Math.round(view.scale * 100)}%</output>
-        <button className="canvas-control" type="button" aria-label="Zoom in" onClick={() => zoomFromCentre(1.25)}><Icon name="plus" /></button>
+        <button className="canvas-control" type="button" aria-label="Zoom in" onClick={() => zoomFromCentre(.25)}><Icon name="plus" /></button>
         <button className="canvas-reset" type="button" aria-label="Reset model view" onClick={() => setView(MODEL_VIEW_DEFAULT)}><Icon name="reset" />Reset</button>
       </div>
     </div>
@@ -221,6 +225,10 @@ export function ModelWorkbench() {
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
   const [preview, setPreview] = useState<'mermaid' | 'drawio'>('mermaid');
+  const [view, setView] = useState<'workspace' | 'settings'>('workspace');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [providerSettings, setProviderSettings] = useState<ProviderSettingsView | null>(null);
+  const [settingsStatus, setSettingsStatus] = useState('');
   const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
   const editRevision = useRef(0);
 
@@ -269,12 +277,36 @@ export function ModelWorkbench() {
   }, [project?.draft]);
 
   const loadProject = async (id: string) => {
-    setError(''); setStatus('Loading…');
+    setError(''); setStatus('Loading…'); setView('workspace');
     try {
       const loaded = await requestJson<Project>(`/api/projects/${id}`);
       setProject(loaded); setIntake(projectIntake(loaded)); setStatus('Ready');
     }
     catch (error) { setError(message(error)); setStatus('Load failed'); }
+  };
+
+  const goHome = () => {
+    setView('workspace'); setProject(null); setIntake(emptyDraft); setError(''); setStatus('Ready'); setSettingsStatus('');
+  };
+
+  const openProviderSettings = async () => {
+    setView('settings'); setError(''); setSettingsStatus('Loading settings…');
+    try {
+      setProviderSettings(await requestJson<ProviderSettingsView>('/api/settings/provider'));
+      setSettingsStatus('');
+    } catch (error) { setError(message(error)); setSettingsStatus('Settings unavailable'); }
+  };
+
+  const saveCurrentProviderSettings = async () => {
+    if (!providerSettings) return;
+    setError(''); setSettingsStatus('Saving settings…');
+    try {
+      setProviderSettings(await requestJson<ProviderSettingsView>('/api/settings/provider', {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ baseUrl: providerSettings.baseUrl, model: providerSettings.model }),
+      }));
+      setSettingsStatus('Settings saved');
+    } catch (error) { setError(message(error)); setSettingsStatus('Settings not saved'); }
   };
 
   const filesSelected = async (files: FileList | null) => {
@@ -316,7 +348,7 @@ export function ModelWorkbench() {
     try {
       let target = project;
       if (!target?.draft) target = await persistIntake();
-      setStatus('Generating with OpenAI…');
+      setStatus('Generating with provider…');
       target = await requestJson<Project>(`/api/projects/${target.id}/generate`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clarification: null }),
       });
@@ -397,27 +429,37 @@ export function ModelWorkbench() {
   return <main className="app-shell">
     <a className="skip-link" href="#work-area">Skip to work area</a>
     <header className="product-header">
-      <div className="brand-lockup"><span className="brand-mark"><Icon name="database" /></span><span><strong>Model Foundry</strong><small>Insurance data design</small></span></div>
+      <button className="brand-lockup brand-button" type="button" aria-label="Return home to Model Foundry" onClick={goHome}><span className="brand-mark"><Icon name="database" /></span><span><strong>Model Foundry</strong><small>Data Model Design Space</small></span></button>
       <div className="pilot-badge"><span className="signal" />Local single-user pilot</div>
     </header>
-    {!project && <header className="hero">
+    {!project && view === 'workspace' && <header className="hero">
       <div><span className="eyebrow">Structured modelling workspace</span><h1>Turn complex requirements into models people can trust.</h1>
         <p>Develop one canonical model, surface uncertainty, and export consistent Mermaid and draw.io representations.</p></div>
     </header>}
 
-    <div className="workspace">
-      <aside className="sidebar panel" aria-label="Saved models">
-        <div className="sidebar-heading"><div><span className="eyebrow">Workspace</span><h2>Models</h2></div><button className="secondary-button compact-button" onClick={() => { setProject(null); setIntake(emptyDraft); setError(''); setStatus('Ready'); }}>New model</button></div>
+    <div className={`workspace${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+      <aside className="sidebar panel" aria-label="Workspace navigation">
+        <button className="sidebar-collapse" type="button" aria-label={sidebarCollapsed ? 'Expand workspace sidebar' : 'Collapse workspace sidebar'} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(value => !value)}><Icon name="menu" /><span>{sidebarCollapsed ? 'Expand' : 'Collapse'}</span></button>
+        <div className="sidebar-heading"><div className="sidebar-copy"><span className="eyebrow">Workspace</span><h2>Models</h2></div><button className="secondary-button compact-button sidebar-action" aria-label="New model" onClick={goHome}><Icon name="plus" /><span>New model</span></button></div>
         <div className="project-list">{projects.length ? projects.map(item => <button className={`project-item ${project?.id === item.id ? 'active' : ''}`} aria-pressed={project?.id === item.id} key={item.id} onClick={() => void loadProject(item.id)}>
           <strong>{item.title}</strong><span>{item.versionCount} version{item.versionCount === 1 ? '' : 's'} · {item.hasDraft ? 'working draft' : 'empty'}</span>
         </button>) : <div className="empty-state"><Icon name="database" /><p>No saved models yet</p><span>Create your first model from requirements or source files.</span></div>}</div>
-        <div className="privacy-note"><span className="privacy-icon"><Icon name="shield" /></span><div><strong>Before you generate</strong><p>Generate sends the supplied material to OpenAI through the server. Credentials stay server-side.</p></div></div>
+        <nav className="sidebar-menu" aria-label="Application"><button type="button" className={view === 'settings' ? 'active' : ''} aria-label="Provider settings" aria-pressed={view === 'settings'} onClick={() => void openProviderSettings()}><Icon name="settings" /><span>Settings</span></button></nav>
+        <div className="privacy-note"><span className="privacy-icon"><Icon name="shield" /></span><div><strong>Before you generate</strong><p>Generate sends the supplied material to the configured provider through the server. Credentials stay server-side.</p></div></div>
       </aside>
 
       <section className="main-column" id="work-area" tabIndex={-1}>
         {error && <div className="error-banner" role="alert"><strong>Action stopped</strong><span>{error}</span></div>}
-        {!project || !project.draft ? <section className="panel intake-card">
-          <div className="section-heading"><div><span className="eyebrow">{project ? 'Model setup' : 'New model'}</span><h2>{project ? 'Refine the intake before generation' : 'Start with what you know'}</h2><p>Incomplete requirements are expected. Save the model without contacting OpenAI, then generate when it is ready.</p></div><span className="status-dot" aria-live="polite">{status}</span></div>
+        {view === 'settings' ? <section className="panel settings-card">
+          <div className="section-heading"><div><span className="eyebrow">Application settings</span><h1>Provider settings</h1><p>Choose an OpenAI-compatible Responses API endpoint and model. Changes apply to the next generation or chat request.</p></div><span className="status-dot" aria-live="polite">{settingsStatus || 'Ready'}</span></div>
+          {providerSettings && <>
+            <label>Provider base URL<input aria-label="Provider base URL" type="url" value={providerSettings.baseUrl} onChange={event => setProviderSettings({ ...providerSettings, baseUrl: event.target.value })} placeholder="https://api.openai.com/v1" /></label>
+            <label>Provider model<input aria-label="Provider model" value={providerSettings.model} onChange={event => setProviderSettings({ ...providerSettings, model: event.target.value })} placeholder="Provider model name" /></label>
+            <div className={`credential-status ${providerSettings.apiKeyConfigured ? 'configured' : ''}`}><Icon name="shield" /><div><strong>Server-side API key {providerSettings.apiKeyConfigured ? 'configured' : 'not configured'}</strong><p>The API key is read from <code>OPENAI_API_KEY</code> and is never displayed or stored here.</p></div></div>
+            <div className="settings-actions"><button className="primary-button" type="button" onClick={() => void saveCurrentProviderSettings()}>Save settings</button><button className="secondary-button" type="button" onClick={goHome}>Back to models</button></div>
+          </>}
+        </section> : !project || !project.draft ? <section className="panel intake-card">
+          <div className="section-heading"><div><span className="eyebrow">{project ? 'Model setup' : 'New model'}</span><h2>{project ? 'Refine the intake before generation' : 'Start with what you know'}</h2><p>Incomplete requirements are expected. Save the model without contacting the configured provider, then generate when it is ready.</p></div><span className="status-dot" aria-live="polite">{status}</span></div>
           <label>Model name<input aria-label="Model name" value={intake.title} onChange={event => setIntake({ ...intake, title: event.target.value })} placeholder="e.g. Claim Payment" /></label>
           <label>Requirements<textarea aria-label="Requirements" value={intake.requirements} onChange={event => setIntake({ ...intake, requirements: event.target.value })} placeholder="Describe the entities, relationships, rules and questions…" rows={8} /></label>
           <label className="file-drop"><span className="file-drop-title"><Icon name="plus" />Add source files</span><input aria-label="Source files" type="file" multiple accept=".md,.txt,.sql,.ddl,.json" onChange={event => void filesSelected(event.target.files)} />
@@ -427,7 +469,7 @@ export function ModelWorkbench() {
             <button className="secondary-button" disabled={busy || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void saveIntake()}>{project ? 'Save changes' : 'Save model'}</button>
             <button className="primary-button" disabled={busy || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void generate()}>Generate draft <Icon name="arrow" /></button>
             {project && <button className="danger-button" disabled={busy} onClick={() => void removeProject()}>Delete model</button>}
-            <span>Save makes no provider call. Generate sends the current intake to OpenAI.</span>
+            <span>Save makes no provider call. Generate sends the current intake to the configured provider.</span>
           </div>
         </section> : <>
           <section className="panel model-header">
@@ -452,7 +494,7 @@ export function ModelWorkbench() {
                   : project.messages.length === 0 && <li className="chat-empty">No open questions. Try “Add recovery transactions and explain the relationship.”</li>}
               </ol>
               <label>{project.draft.clarificationQuestions[0] ? 'Answer or request a change' : 'Message'}<textarea aria-label="Message the model assistant" value={chatMessage} maxLength={4000} rows={3} onChange={event => setChatMessage(event.target.value)} placeholder={project.draft.clarificationQuestions[0] ? 'Answer the question or describe another change…' : 'Describe the change you want…'} /></label>
-              <div className="chat-actions"><small>Your message, current model and source context are sent to OpenAI.</small><button className="primary-button" disabled={busy || !chatMessage.trim()} onClick={() => void sendChatMessage()}>Send message <Icon name="arrow" /></button></div>
+              <div className="chat-actions"><small>Your message, current model and source context are sent to the configured provider.</small><button className="primary-button" disabled={busy || !chatMessage.trim()} onClick={() => void sendChatMessage()}>Send message <Icon name="arrow" /></button></div>
             </section>
           </div>
 

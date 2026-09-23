@@ -1,4 +1,5 @@
 import type { GenerationRequest, ModelProvider, RevisionRequest } from './model-provider';
+import { DEFAULT_PROVIDER_BASE_URL, normalizeProviderBaseUrl } from '@/domain/provider-settings';
 
 const text = { type: 'string', minLength: 1 } as const;
 const stringArray = { type: 'array', items: text } as const;
@@ -82,6 +83,7 @@ export interface ProviderDiagnostic {
 
 interface ProviderOptions {
   apiKey: string;
+  baseUrl?: string;
   model: string;
   fetcher?: typeof fetch;
   timeoutMs?: number;
@@ -122,6 +124,7 @@ const sourceText = (request: GenerationRequest) => request.sources
 
 export class OpenAIModelProvider implements ModelProvider {
   readonly #apiKey: string;
+  readonly #baseUrl: string;
   readonly #model: string;
   readonly #fetcher: typeof fetch;
   readonly #timeoutMs: number;
@@ -131,9 +134,11 @@ export class OpenAIModelProvider implements ModelProvider {
   readonly #now: () => number;
 
   constructor(options: ProviderOptions) {
-    if (!options.apiKey || !options.model) throw new Error('provider-not-configured');
+    if (!options.apiKey || !options.model?.trim()) throw new Error('provider-not-configured');
     this.#apiKey = options.apiKey;
-    this.#model = options.model;
+    try { this.#baseUrl = normalizeProviderBaseUrl(options.baseUrl ?? DEFAULT_PROVIDER_BASE_URL); }
+    catch { throw new Error('provider-config-invalid'); }
+    this.#model = options.model.trim();
     this.#fetcher = options.fetcher ?? fetch;
     this.#timeoutMs = configuredInteger(options.timeoutMs ?? 120_000, 1_000, 600_000);
     this.#reasoningEffort = options.reasoningEffort ?? 'low';
@@ -150,6 +155,7 @@ export class OpenAIModelProvider implements ModelProvider {
     if (!apiKey || !model) throw new Error('provider-not-configured');
     return new OpenAIModelProvider({
       apiKey,
+      baseUrl: environment.OPENAI_BASE_URL ?? DEFAULT_PROVIDER_BASE_URL,
       model,
       timeoutMs: environmentInteger(environment.OPENAI_TIMEOUT_MS, 120_000, 1_000, 600_000),
       reasoningEffort: environmentEffort(environment.OPENAI_REASONING_EFFORT),
@@ -176,7 +182,7 @@ export class OpenAIModelProvider implements ModelProvider {
     const startedAt = this.#now();
     let response: Response;
     try {
-      response = await this.#fetcher('https://api.openai.com/v1/responses', {
+      response = await this.#fetcher(`${this.#baseUrl}/responses`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.#apiKey}`, 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(this.#timeoutMs),

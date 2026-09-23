@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ModelService } from '@/application/model-service';
+import { DEFAULT_PROVIDER_BASE_URL } from '@/domain/provider-settings';
 import type { GenerationRequest, ModelProvider, RevisionRequest } from '@/provider/model-provider';
 import { SqliteModelRepository } from '@/storage/sqlite-repository';
 import { claimPaymentModel, claimSources, generatedClaimPayment } from '../fixtures/claim-payment';
@@ -24,7 +25,7 @@ function harness(result: unknown = generatedClaimPayment) {
       return { ...revised, assistantMessage: 'I added recovery transactions and updated the model definition.' };
     },
   };
-  return { repository, requests, revisions, service: new ModelService(repository, provider) };
+  return { repository, requests, revisions, service: new ModelService(repository, provider, { baseUrl: DEFAULT_PROVIDER_BASE_URL, model: 'test-model' }, true) };
 }
 
 describe('model application service', () => {
@@ -44,7 +45,7 @@ describe('model application service', () => {
       async generate() { return { model: { id: 'invalid' } }; },
       async revise() { return { model: { id: 'invalid' } }; },
     };
-    const invalidService = new ModelService(repository, invalidProvider);
+    const invalidService = new ModelService(repository, invalidProvider, { baseUrl: DEFAULT_PROVIDER_BASE_URL, model: 'test-model' }, true);
     await expect(invalidService.regenerate(project.id, 'One claim has zero or many payments.')).rejects.toThrow('entities-invalid');
     expect(repository.getProject(project.id)?.draft).toEqual(generatedClaimPayment);
     repository.close();

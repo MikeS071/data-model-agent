@@ -9,6 +9,21 @@ const directories: string[] = [];
 afterEach(() => { while (directories.length) rmSync(directories.pop()!, { recursive: true, force: true }); });
 
 describe('SQLite project and version lifecycle', () => {
+  it('persists non-secret provider settings without changing saved projects', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'data-model-agent-')); directories.push(directory);
+    const repository = new SqliteModelRepository(join(directory, 'models.db'));
+    const fallback = { baseUrl: 'https://api.openai.com/v1', model: 'environment-model' };
+    const project = repository.createProject({ title: 'Claim Payment', requirements: 'Model claims.', sources: [] });
+
+    expect(repository.getProviderSettings(fallback)).toEqual(fallback);
+    expect(repository.saveProviderSettings({ baseUrl: 'https://models.example/v1/', model: 'insurance-model' })).toEqual({
+      baseUrl: 'https://models.example/v1', model: 'insurance-model',
+    });
+    expect(repository.getProviderSettings(fallback)).toEqual({ baseUrl: 'https://models.example/v1', model: 'insurance-model' });
+    expect(repository.getProject(project.id)?.requirements).toBe('Model claims.');
+    repository.close();
+  });
+
   it('updates pre-generation intake and deletes the project with its dependent records', () => {
     const directory = mkdtempSync(join(tmpdir(), 'data-model-agent-')); directories.push(directory);
     const repository = new SqliteModelRepository(join(directory, 'models.db'));

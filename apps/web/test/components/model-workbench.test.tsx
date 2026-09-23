@@ -89,11 +89,11 @@ describe('Michal modelling workflow', () => {
     expect(chat.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(editor.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole('group', { name: 'Interactive model canvas' })).toBeTruthy();
-    expect(screen.getByText('100%')).toBeTruthy();
+    expect(screen.getByText('50%')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Zoom in' }));
-    expect(screen.getByText('125%')).toBeTruthy();
+    expect(screen.getByText('75%')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Reset model view' }));
-    expect(screen.getByText('100%')).toBeTruthy();
+    expect(screen.getByText('50%')).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Model chat' }).textContent).toContain('Should an external payment reference be unique?');
     expect(screen.queryByLabelText('Clarification answer')).toBeNull();
 
@@ -125,8 +125,48 @@ describe('Michal modelling workflow', () => {
   it('makes external transmission and local-pilot limits visible', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json([])));
     render(<ModelWorkbench />);
-    expect(await screen.findByText(/Generate sends the supplied material to OpenAI/u)).toBeTruthy();
+    expect(await screen.findByText(/Generate sends the supplied material to the configured provider/u)).toBeTruthy();
     expect(screen.getByText(/local single-user pilot/iu)).toBeTruthy();
+  });
+
+  it('opens provider settings, collapses navigation and returns home from the brand', async () => {
+    let settings = { baseUrl: 'https://api.openai.com/v1', model: 'environment-model', apiKeyConfigured: true };
+    const calls: Array<{ url: string; method: string; body: unknown }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      calls.push({ url, method, body });
+      if (url === '/api/projects') return Response.json([]);
+      if (url === '/api/settings/provider' && method === 'GET') return Response.json(settings);
+      if (url === '/api/settings/provider' && method === 'PUT') {
+        settings = { ...(body as typeof settings), apiKeyConfigured: true };
+        return Response.json(settings);
+      }
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await screen.findByText('No saved models yet');
+    expect(screen.getByText('Data Model Design Space')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Collapse workspace sidebar' }));
+    expect(document.querySelector('.workspace')?.classList.contains('sidebar-collapsed')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Expand workspace sidebar' }).getAttribute('aria-expanded')).toBe('false');
+
+    await user.click(screen.getByRole('button', { name: 'Provider settings' }));
+    expect(await screen.findByRole('heading', { name: 'Provider settings' })).toBeTruthy();
+    await user.clear(screen.getByLabelText('Provider base URL'));
+    await user.type(screen.getByLabelText('Provider base URL'), 'https://models.example/v1');
+    await user.clear(screen.getByLabelText('Provider model'));
+    await user.type(screen.getByLabelText('Provider model'), 'claims-model');
+    await user.click(screen.getByRole('button', { name: 'Save settings' }));
+    expect(await screen.findByText('Settings saved')).toBeTruthy();
+    expect(calls.find(call => call.url === '/api/settings/provider' && call.method === 'PUT')?.body).toEqual({
+      baseUrl: 'https://models.example/v1', model: 'claims-model',
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Return home to Model Foundry' }));
+    expect(screen.getByRole('heading', { name: 'Start with what you know' })).toBeTruthy();
   });
 
   it('saves, edits and deletes a model before provider generation', async () => {

@@ -9,7 +9,7 @@ describe('OpenAI Responses boundary', () => {
       output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(generatedClaimPayment) }] }],
     }), { status: 200, headers: { 'content-type': 'application/json', 'x-request-id': 'request-123' } }));
     const provider = new OpenAIModelProvider({
-      apiKey: 'synthetic-secret', model: 'configured-model', fetcher, timeoutMs: 1000,
+      apiKey: 'synthetic-secret', baseUrl: 'https://models.example.test/api/v1/', model: 'configured-model', fetcher, timeoutMs: 1000,
       reasoningEffort: 'low', maxOutputTokens: 8000, diagnostics: event => diagnostics.push(event),
     });
     const actual = await provider.generate({ requirements: 'Model claim payments.', sources: claimSources, currentModel: null, clarification: null });
@@ -17,7 +17,7 @@ describe('OpenAI Responses boundary', () => {
     expect(fetcher).toHaveBeenCalledOnce();
     const [url, init] = fetcher.mock.calls[0];
     const body = JSON.parse(String(init?.body));
-    expect(url).toBe('https://api.openai.com/v1/responses');
+    expect(url).toBe('https://models.example.test/api/v1/responses');
     expect(init?.headers).toEqual({ Authorization: 'Bearer synthetic-secret', 'Content-Type': 'application/json' });
     expect([
       body.model, body.store, body.reasoning.effort, body.max_output_tokens,
@@ -36,10 +36,10 @@ describe('OpenAI Responses boundary', () => {
   });
 
   it('loads bounded defaults and operator overrides from the server environment', async () => {
-    const calls: Array<Record<string, unknown>> = [];
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
     const diagnostics: Array<{ timeoutMs: number }> = [];
-    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
-      calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+      calls.push({ url: String(url), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
       return Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(generatedClaimPayment) }] }] });
     });
     const request = { requirements: 'x', sources: [], currentModel: null, clarification: null };
@@ -48,11 +48,14 @@ describe('OpenAI Responses boundary', () => {
       { fetcher, diagnostics: event => diagnostics.push(event) },
     ).generate(request);
     await OpenAIModelProvider.fromEnvironment({
-      OPENAI_API_KEY: 'x', OPENAI_MODEL: 'm', OPENAI_TIMEOUT_MS: '90000',
+      OPENAI_API_KEY: 'x', OPENAI_BASE_URL: 'https://compatible.example/v1', OPENAI_MODEL: 'm', OPENAI_TIMEOUT_MS: '90000',
       OPENAI_REASONING_EFFORT: 'medium', OPENAI_MAX_OUTPUT_TOKENS: '12000',
     }, { fetcher, diagnostics: event => diagnostics.push(event) }).generate(request);
-    expect(calls.map(body => [(body.reasoning as { effort: string }).effort, body.max_output_tokens])).toEqual([
+    expect(calls.map(call => [(call.body.reasoning as { effort: string }).effort, call.body.max_output_tokens])).toEqual([
       ['low', 8000], ['medium', 12000],
+    ]);
+    expect(calls.map(call => call.url)).toEqual([
+      'https://api.openai.com/v1/responses', 'https://compatible.example/v1/responses',
     ]);
     expect(diagnostics.map(event => event.timeoutMs)).toEqual([120_000, 90_000]);
   });
@@ -63,6 +66,8 @@ describe('OpenAI Responses boundary', () => {
       { OPENAI_API_KEY: 'x', OPENAI_MODEL: 'm', OPENAI_TIMEOUT_MS: '0' },
       { OPENAI_API_KEY: 'x', OPENAI_MODEL: 'm', OPENAI_MAX_OUTPUT_TOKENS: 'many' },
       { OPENAI_API_KEY: 'x', OPENAI_MODEL: 'm', OPENAI_REASONING_EFFORT: 'fast' },
+      { OPENAI_API_KEY: 'x', OPENAI_MODEL: 'm', OPENAI_BASE_URL: 'ftp://models.example/v1' },
+      { OPENAI_API_KEY: 'x', OPENAI_MODEL: 'm', OPENAI_BASE_URL: 'https://user:secret@models.example/v1' },
     ]) expect(() => OpenAIModelProvider.fromEnvironment(environment)).toThrow('provider-config-invalid');
 
     const diagnostics: unknown[] = [];

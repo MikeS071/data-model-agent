@@ -4,6 +4,8 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { parseGenerationResult, validateCanonicalModel } from '@/domain/model';
 import type { CanonicalModel, GenerationResult, SourceArtifact, SourceArtifactInput } from '@/domain/model';
+import { normalizeProviderBaseUrl, parseProviderSettings } from '@/domain/provider-settings';
+import type { ProviderSettings } from '@/domain/provider-settings';
 import { renderDrawio } from '@/render/drawio';
 import { renderMermaid } from '@/render/mermaid';
 
@@ -52,6 +54,7 @@ interface SourceRow { id: string; name: string; kind: SourceArtifact['kind']; co
 interface DraftRow { model_json: string; assumptions_json: string; warnings_json: string; questions_json: string }
 interface MessageRow { id: string; role: ChatMessage['role']; content: string; created_at: string }
 interface VersionRow extends DraftRow { id: string; project_id: string; version_number: number; sources_json: string; mermaid: string; drawio: string; created_at: string }
+interface ProviderSettingsRow { base_url: string; model: string }
 
 const now = () => new Date().toISOString();
 const decodeGeneration = (row: DraftRow): GenerationResult => parseGenerationResult({
@@ -98,9 +101,29 @@ export class SqliteModelRepository {
         mermaid TEXT NOT NULL, drawio TEXT NOT NULL, created_at TEXT NOT NULL,
         UNIQUE(project_id, version_number)
       );
+      CREATE TABLE IF NOT EXISTS provider_settings (
+        singleton INTEGER PRIMARY KEY CHECK(singleton = 1), base_url TEXT NOT NULL,
+        model TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (2);
+      INSERT OR IGNORE INTO schema_migrations(version) VALUES (3);
     `);
+  }
+
+  getProviderSettings(fallback: ProviderSettings): ProviderSettings {
+    const row = this.#database.prepare('SELECT base_url,model FROM provider_settings WHERE singleton=1').get() as ProviderSettingsRow | undefined;
+    return row ? parseProviderSettings({ baseUrl: row.base_url, model: row.model }) : {
+      baseUrl: normalizeProviderBaseUrl(fallback.baseUrl), model: fallback.model.trim(),
+    };
+  }
+
+  saveProviderSettings(input: ProviderSettings): ProviderSettings {
+    const value = parseProviderSettings(input);
+    this.#database.prepare(`INSERT INTO provider_settings(singleton,base_url,model,updated_at) VALUES (1,?,?,?)
+      ON CONFLICT(singleton) DO UPDATE SET base_url=excluded.base_url, model=excluded.model, updated_at=excluded.updated_at`)
+      .run(value.baseUrl, value.model, now());
+    return value;
   }
 
   createProject(input: { title: string; requirements: string; sources: SourceArtifactInput[] }): ProjectRecord {

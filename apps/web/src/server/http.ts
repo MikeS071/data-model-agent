@@ -7,8 +7,9 @@ const publicErrors = new Set([
   'provider-not-configured', 'provider-timeout', 'provider-unavailable', 'provider-rate-limited', 'provider-failed',
   'provider-config-invalid', 'provider-output-missing', 'provider-output-invalid', 'provider-output-incomplete',
   'generation-result-invalid', 'revision-result-invalid', 'revision-message-invalid', 'chat-message-invalid', 'entities-invalid',
+  'provider-settings-invalid',
 ]);
-const clientErrors = new Set(['project-input-invalid', 'requirements-missing', 'sources-invalid', 'source-invalid', 'source-kind-unsupported', 'source-binary', 'source-too-large', 'sources-too-large', 'chat-message-invalid']);
+const clientErrors = new Set(['project-input-invalid', 'requirements-missing', 'sources-invalid', 'source-invalid', 'source-kind-unsupported', 'source-binary', 'source-too-large', 'sources-too-large', 'chat-message-invalid', 'provider-settings-invalid']);
 
 const errorResponse = (error: unknown) => {
   const candidate = error instanceof Error ? error.message : '';
@@ -29,6 +30,17 @@ async function json(request: Request): Promise<Record<string, unknown>> {
 
 export async function listProjects(service: ModelService) {
   try { return Response.json(service.listProjects()); } catch (error) { return errorResponse(error); }
+}
+
+export function getProviderSettings(service: ModelService) {
+  try { return Response.json(service.getProviderSettings()); } catch (error) { return errorResponse(error); }
+}
+
+export async function saveProviderSettings(request: Request, service: ModelService) {
+  try {
+    const input = await json(request);
+    return Response.json(service.saveProviderSettings({ baseUrl: input.baseUrl as string, model: input.model as string }));
+  } catch (error) { return errorResponse(error); }
 }
 
 export async function createProject(request: Request, service: ModelService) {

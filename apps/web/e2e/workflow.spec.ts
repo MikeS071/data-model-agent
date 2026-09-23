@@ -4,6 +4,8 @@ import { generatedClaimPayment } from '../test/fixtures/claim-payment';
 test('Michal can generate, refine, preview and version a claim payment model', async ({ page }) => {
   let generationCount = 0;
   let created = false;
+  let providerSettings = { baseUrl: 'https://api.openai.com/v1', model: 'environment-model', apiKeyConfigured: true };
+  const longAssistantReply = `I added recovery transactions and updated the model definition. https://models.example/${'x'.repeat(600)}`;
   const project = {
     id: 'project-1',
     title: 'Claim Payment',
@@ -75,7 +77,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
         { id: `message-${project.messages.length + 1}`, role: 'user', content: message, createdAt: '2026-09-22T00:02:00Z' },
         { id: `message-${project.messages.length + 2}`, role: 'assistant', content: answeringQuestion
           ? 'I applied the uniqueness requirement and cleared the question.'
-          : 'I added recovery transactions and updated the model definition.', createdAt: '2026-09-22T00:02:01Z' },
+          : longAssistantReply, createdAt: '2026-09-22T00:02:01Z' },
       ];
       return json(project);
     }
@@ -99,10 +101,25 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     if (path === `/api/projects/${project.id}` && method === 'GET') return json(project);
     return route.abort('failed');
   });
+  await page.route('**/api/settings/provider', async route => {
+    if (route.request().method() === 'PUT') {
+      providerSettings = { ...route.request().postDataJSON() as typeof providerSettings, apiKeyConfigured: true };
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(providerSettings) });
+  });
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Turn complex requirements/u })).toBeVisible();
-  await expect(page.getByText(/Generate sends the supplied material to OpenAI/u)).toBeVisible();
+  await expect(page.getByText(/Generate sends the supplied material to the configured provider/u)).toBeVisible();
+  await expect(page.getByText('Data Model Design Space')).toBeVisible();
+  await page.getByRole('button', { name: 'Provider settings' }).click();
+  await expect(page.getByRole('heading', { name: 'Provider settings' })).toBeVisible();
+  await page.getByLabel('Provider base URL').fill('https://models.example/v1');
+  await page.getByLabel('Provider model').fill('claims-model');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText('Settings saved')).toBeVisible();
+  await page.getByRole('button', { name: 'Return home to Model Foundry' }).click();
+  await expect(page.getByRole('heading', { name: 'Start with what you know' })).toBeVisible();
 
   await page.getByLabel('Model name').fill('Claim Payment');
   await page.getByLabel('Requirements').fill('Model claim payments for a large insurance organisation.');
@@ -119,15 +136,21 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await expect(page.getByText('A claim uses one currency for approval and payments.')).toBeVisible();
   await expect(page.getByText('Should an external payment reference be unique?')).toBeVisible();
   await expect(page.locator('.mermaid-preview svg')).toBeVisible();
+  const liveOutput = page.getByRole('region', { name: 'Live model output' });
+  const outputWidthBeforeCollapse = (await liveOutput.boundingBox())!.width;
+  await page.getByRole('button', { name: 'Collapse workspace sidebar' }).click();
+  await expect(page.getByRole('button', { name: 'Expand workspace sidebar' })).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(async () => (await liveOutput.boundingBox())!.width).toBeGreaterThan(outputWidthBeforeCollapse);
   const modelCanvas = page.getByRole('group', { name: 'Interactive model canvas' });
   const canvasContent = modelCanvas.locator('.model-canvas-content');
-  await expect(canvasContent).toHaveAttribute('data-scale', '1');
+  await expect(canvasContent).toHaveAttribute('data-scale', '0.5');
   const canvasBox = await modelCanvas.boundingBox();
   expect(canvasBox).toBeTruthy();
+  expect(canvasBox!.height).toBeGreaterThanOrEqual(540);
   const scrollBeforeZoom = await page.evaluate(() => window.scrollY);
   await page.mouse.move(canvasBox!.x + canvasBox!.width / 2, canvasBox!.y + canvasBox!.height / 2);
   await page.mouse.wheel(0, -420);
-  await expect.poll(async () => Number(await canvasContent.getAttribute('data-scale'))).toBeGreaterThan(1);
+  await expect.poll(async () => Number(await canvasContent.getAttribute('data-scale'))).toBeGreaterThan(.5);
   expect(await page.evaluate(() => window.scrollY)).toBe(scrollBeforeZoom);
 
   const panBeforeDrag = Number(await canvasContent.getAttribute('data-offset-x'));
@@ -139,7 +162,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await modelCanvas.press('ArrowRight');
   await expect.poll(async () => Number(await canvasContent.getAttribute('data-offset-x'))).toBeGreaterThan(panBeforeKeyboard);
   await page.getByRole('button', { name: 'Reset model view' }).click();
-  await expect(canvasContent).toHaveAttribute('data-scale', '1');
+  await expect(canvasContent).toHaveAttribute('data-scale', '0.5');
   await expect(canvasContent).toHaveAttribute('data-offset-x', '0');
   await expect(canvasContent).toHaveAttribute('data-offset-y', '0');
   const entityEditors = page.locator('details.entity-editor');
@@ -149,7 +172,6 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await entityEditors.nth(1).locator('summary').click();
   await expect(page.getByLabel('Entity name Payment')).toBeVisible();
 
-  const liveOutput = page.getByRole('region', { name: 'Live model output' });
   const chat = page.getByRole('region', { name: 'Model chat' });
   const editor = page.getByRole('region', { name: 'Structured model editor' });
   const review = page.getByRole('region', { name: 'Assumptions and warnings' });
@@ -173,15 +195,21 @@ test('Michal can generate, refine, preview and version a claim payment model', a
 
   await page.getByRole('button', { name: 'draw.io' }).click();
   await expect(page.getByRole('button', { name: 'draw.io' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(canvasContent).toHaveAttribute('data-scale', '1');
+  await expect(canvasContent).toHaveAttribute('data-scale', '0.5');
   await expect(page.getByRole('img', { name: 'draw.io model preview' })).toBeVisible();
   await page.getByText(/Canonical JSON/u).click();
   await expect(page.locator('pre').filter({ hasText: 'Insurance Claim' })).toBeVisible();
 
   await page.getByLabel('Message the model assistant').fill('Add recovery transactions.');
   await page.getByRole('button', { name: 'Send message' }).click();
-  await expect(page.getByText('I added recovery transactions and updated the model definition.')).toBeVisible();
+  await expect(page.getByText(/I added recovery transactions and updated the model definition/u)).toBeVisible();
   await expect(page.getByLabel('Canonical model business definition')).toHaveValue('Tracks claims, payments and recovery transactions.');
+  const latestAssistantMessage = page.locator('.chat-message.assistant').last();
+  await expect.poll(async () => {
+    const messageBox = await latestAssistantMessage.boundingBox(), currentChatBox = await chat.boundingBox();
+    return Boolean(messageBox && currentChatBox && messageBox.x + messageBox.width <= currentChatBox.x + currentChatBox.width + 1);
+  }).toBe(true);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
   const buttonTypography = await page.locator('.app-shell button').evaluateAll(buttons => buttons.map(button => {
     const style = getComputedStyle(button);
