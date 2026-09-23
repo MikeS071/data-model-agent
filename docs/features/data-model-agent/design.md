@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 9
+revision: 10
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -47,6 +47,14 @@ edit its name, requirements and source artifacts before any draft exists, then g
 when the intake is ready. Deleting a project is an explicit confirmed action that removes
 the project and its cascading source, working-draft and version records; cancellation
 must leave all records unchanged.
+
+The original requirements remain visible and editable after generation as the project's
+Persistent model instructions. They are the durable modelling brief rather than a
+one-time prompt: generation and every chat revision use the latest saved value. The
+working-draft form offers an explicit save action, reports whether edits are saved, and
+flushes unsaved instruction edits before Regenerate or Send message so a provider request
+cannot use stale requirements. Updating these instructions does not itself call the
+provider or rewrite the canonical model.
 
 After a working draft exists, a project-scoped chat shares the top of the workbench with
 the live model output. Each user message is sent with the current canonical model, the
@@ -338,6 +346,7 @@ of scope.
 | D-019 | Persist a validated non-secret base URL and model for an OpenAI-compatible Responses API while keeping the API key environment-only. | Selecting another compatible provider must not require source edits or put credentials in the browser/database. | Keep all settings environment-only; store API keys in SQLite; implement multiple provider-specific adapters now. | Settings affect subsequent requests, use an idempotent singleton row, clearly disclose the configured destination, and reject invalid URLs/models without overwriting the last valid values. |
 | D-020 | Use a collapsible workspace navigation rail, make the brand a home action, enlarge the visualization, reset it to 50%, and constrain chat content to the panel. | The model is the primary work surface and should gain space without sacrificing discoverable navigation or readable conversation. | Keep the permanent 240px panel; hide navigation entirely; add a separate route for every view. | Desktop collapse state remains local UI state with labelled icon controls, narrow screens keep a full-width menu, the live-output column receives the recovered width, and long user/provider content wraps without page overflow. |
 | D-021 | Make chat sends optimistic with one live thinking turn, bound long assistant bubbles to ten visible lines, and collapse every structured-editor group and history by default. | The user needs immediate acknowledgement, an unbroken readable transcript and a compact work surface without losing content or model-update safety. | Wait silently for the provider; truncate long replies; leave the first entity and secondary editors open; allow concurrent model mutations. | Transient chat state is distinct from persisted history, failure restores unsent work safely, one provider revision runs at a time, native disclosures remain keyboard operable, and behavioral tests cover pending, success, failure and initial collapsed state. |
+| D-022 | Treat the original requirements as editable Persistent model instructions throughout the working-draft lifecycle. | The model needs a durable human-authored brief that can evolve with the project and consistently ground regeneration and chat. | Hide requirements after generation; copy them into chat manually; apply edits immediately by calling the provider. | Instruction edits persist without contacting the provider, their saved state is visible, and any unsaved edit is stored before the next regenerate or chat request. |
 
 ## Approval
 
@@ -374,3 +383,8 @@ assistant replies, immediate user-message feedback with a live thinking bubble, 
 initially collapsed entities, relationships, validation rules and version history. That
 direct interaction decision accepts revision 9 and D-021 without changing the accepted
 request, provider boundary or atomic model-update rules.
+Michal then clarified that the requirements supplied when starting a model must remain
+editable and act like a system prompt. That direct product decision accepts revision 10
+and D-022: the requirements become Persistent model instructions used by every later
+generation and chat turn, without becoming an executable or privileged provider-system
+message and without changing the accepted request boundaries.

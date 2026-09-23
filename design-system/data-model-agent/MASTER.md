@@ -27,6 +27,10 @@ typography guidance with the matched Data-Dense Dashboard and Minimalism & Swiss
 - Keep the current model title and version actions visible at the top of the work area.
 - Treat the next clarification as a guided assistant message in chat; its answer updates
   the same canonical model as any other conversational change.
+- Keep the original requirements available in the working draft as an editable
+  `Persistent model instructions` field. Make its saved state and effect explicit: it
+  grounds every later regeneration and assistant turn but editing it alone makes no
+  provider call.
 - Put the full-width structured editor below the live-output/chat row, followed by version
   history, with assumptions and warnings as the final review section.
 - Collapse every entity, relationships, validation rules and version history initially
