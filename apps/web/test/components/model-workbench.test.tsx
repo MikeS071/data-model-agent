@@ -38,6 +38,7 @@ describe('Michal modelling workflow', () => {
       calls.push({ url, method, body });
       if (url === '/api/projects' && method === 'GET') return Response.json([]);
       if (url === '/api/projects' && method === 'POST') { current = { ...project, ...(body as object) }; return Response.json(current, { status: 201 }); }
+      if (url === '/api/projects/project-1' && method === 'PUT') { current = { ...current, ...(body as object) }; return Response.json(current); }
       if (url.endsWith('/generate')) { current = { ...current, draft: generatedWithQuestion }; return Response.json(current); }
       if (url.endsWith('/draft')) { current = { ...current, draft: body as typeof generatedClaimPayment }; return Response.json(body); }
       if (url.endsWith('/chat')) {
@@ -79,7 +80,18 @@ describe('Michal modelling workflow', () => {
     expect(await screen.findByRole('heading', { name: 'Claim Payment model' })).toBeTruthy();
     expect(screen.getByText('A claim uses one currency for approval and payments.')).toBeTruthy();
     expect((calls.find(call => call.url === '/api/projects' && call.method === 'POST')?.body as { sources: Array<{ kind: string }> }).sources[0].kind).toBe('ddl');
+    const entityEditors = [...document.querySelectorAll<HTMLDetailsElement>('details.entity-editor')];
+    expect(entityEditors).toHaveLength(2);
+    expect(entityEditors.every(section => !section.open)).toBe(true);
+    await user.click(entityEditors[0].querySelector('summary')!);
     expect(screen.getByLabelText('claim_id reference')).toBeTruthy();
+
+    const relationshipEditor = screen.getByText('Relationships').closest('details');
+    const rulesEditor = screen.getByText('Validation rules').closest('details');
+    const history = screen.getByText('Version history').closest('details');
+    expect(relationshipEditor?.open).toBe(false);
+    expect(rulesEditor?.open).toBe(false);
+    expect(history?.open).toBe(false);
 
     const liveOutput = screen.getByRole('region', { name: 'Live model output' });
     const chat = screen.getByRole('region', { name: 'Model chat' });
@@ -97,9 +109,19 @@ describe('Michal modelling workflow', () => {
     expect(screen.getByRole('region', { name: 'Model chat' }).textContent).toContain('Should an external payment reference be unique?');
     expect(screen.queryByLabelText('Clarification answer')).toBeNull();
 
+    const instructions = screen.getByLabelText('Persistent model instructions');
+    expect((instructions as HTMLTextAreaElement).value).toBe('Model claim payments.');
+    await user.clear(instructions);
+    await user.type(instructions, 'Model claim payments and keep an auditable payment history.');
+    expect(calls.filter(call => call.url.endsWith('/chat'))).toHaveLength(0);
+
     await user.type(screen.getByLabelText('Message the model assistant'), 'Yes, within the payment platform.');
     await user.click(screen.getByRole('button', { name: 'Send message' }));
     expect(await screen.findByText('I applied the uniqueness requirement and cleared the question.')).toBeTruthy();
+    const instructionSave = calls.find(call => call.url === '/api/projects/project-1' && call.method === 'PUT');
+    const chatCall = calls.find(call => call.url.endsWith('/chat'));
+    expect((instructionSave?.body as { requirements: string }).requirements).toBe('Model claim payments and keep an auditable payment history.');
+    expect(calls.indexOf(instructionSave!)).toBeLessThan(calls.indexOf(chatCall!));
     expect(screen.getByDisplayValue('Tracks claim payments with unique platform references.')).toBeTruthy();
     expect(screen.queryByText('Should an external payment reference be unique?')).toBeNull();
 
@@ -107,10 +129,12 @@ describe('Michal modelling workflow', () => {
     await user.clear(entityName);
     await user.type(entityName, 'Insurance Claim');
     await waitFor(() => expect(calls.some(call => call.url.endsWith('/draft') && JSON.stringify(call.body).includes('Insurance Claim'))).toBe(true));
+    await user.click(rulesEditor!.querySelector('summary')!);
     const ruleExpression = screen.getByLabelText('Rule 1 expression');
     await user.clear(ruleExpression);
     await user.type(ruleExpression, 'paid_total <= approved_amount');
     await waitFor(() => expect(calls.some(call => call.url.endsWith('/draft') && JSON.stringify(call.body).includes('paid_total <= approved_amount'))).toBe(true));
+    await user.click(relationshipEditor!.querySelector('summary')!);
     await user.click(screen.getByRole('button', { name: /Add relationship/u }));
     expect(screen.getByLabelText('Relationship 2 name')).toBeTruthy();
     await user.type(screen.getByLabelText('Message the model assistant'), 'Add recovery transactions.');
@@ -118,8 +142,67 @@ describe('Michal modelling workflow', () => {
     expect(await screen.findByText('I added recovery transactions.')).toBeTruthy();
     expect(screen.getByDisplayValue('Includes recovery transactions.')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Save version' }));
+    await user.click(history!.querySelector('summary')!);
     expect((await screen.findByRole('link', { name: 'Download Mermaid v1' })).getAttribute('href')).toBe('/api/projects/project-1/downloads/mermaid?version=1');
     expect(screen.getByRole('link', { name: 'Download draw.io v1' }).getAttribute('href')).toBe('/api/projects/project-1/downloads/drawio?version=1');
+  });
+
+  it('shows chat messages immediately, keeps the composer usable and recovers failed sends', async () => {
+    const project: ProjectRecord = {
+      id: 'project-1', title: 'Claim Payment', requirements: 'Model claim payments.',
+      createdAt: '2026-09-22T00:00:00Z', updatedAt: '2026-09-22T00:00:00Z', sources: [],
+      draft: structuredClone(generatedClaimPayment), versions: [],
+      messages: [
+        { id: 'message-1', role: 'user', content: 'Keep payment history.', createdAt: '2026-09-22T00:01:00Z' },
+        { id: 'message-2', role: 'assistant', content: 'Payment history remains in the model.', createdAt: '2026-09-22T00:01:01Z' },
+      ],
+    };
+    const pendingResponses: Array<(response: Response) => void> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/projects' && method === 'GET') return Response.json([{
+        id: project.id, title: project.title, updatedAt: project.updatedAt, versionCount: 0, hasDraft: true,
+      }]);
+      if (url === `/api/projects/${project.id}` && method === 'GET') return Response.json(project);
+      if (url.endsWith('/chat')) return new Promise<Response>(resolve => pendingResponses.push(resolve));
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await user.click(await screen.findByRole('button', { name: /Claim Payment/u }));
+    expect(await screen.findByRole('heading', { name: 'Claim Payment model' })).toBeTruthy();
+    expect(screen.getByText('Keep payment history.')).toBeTruthy();
+
+    const composer = screen.getByLabelText('Message the model assistant');
+    await user.type(composer, 'Add a recovery transaction.');
+    await user.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(screen.getByText('Add a recovery transaction.')).toBeTruthy();
+    expect(screen.getByText('Thinking...')).toBeTruthy();
+    expect((composer as HTMLTextAreaElement).disabled).toBe(false);
+    expect((composer as HTMLTextAreaElement).value).toBe('');
+    await user.type(composer, 'Draft the next request.');
+
+    const successful = {
+      ...project,
+      messages: [...project.messages,
+        { id: 'message-3', role: 'user' as const, content: 'Add a recovery transaction.', createdAt: '2026-09-22T00:02:00Z' },
+        { id: 'message-4', role: 'assistant' as const, content: 'Recovery transaction added.', createdAt: '2026-09-22T00:02:01Z' },
+      ],
+    };
+    pendingResponses.shift()!(Response.json(successful));
+    expect(await screen.findByText('Recovery transaction added.')).toBeTruthy();
+    expect(screen.queryByText('Thinking...')).toBeNull();
+    expect((composer as HTMLTextAreaElement).value).toBe('Draft the next request.');
+    expect(screen.getByText('Keep payment history.')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(screen.getByText('Draft the next request.')).toBeTruthy();
+    expect(screen.getByText('Thinking...')).toBeTruthy();
+    pendingResponses.shift()!(Response.json({ error: 'provider-timeout' }, { status: 504 }));
+    expect(await screen.findByText(/provider did not finish/iu)).toBeTruthy();
+    expect(screen.queryByText('Thinking...')).toBeNull();
+    expect((composer as HTMLTextAreaElement).value).toBe('Draft the next request.');
   });
 
   it('makes external transmission and local-pilot limits visible', async () => {

@@ -4,8 +4,13 @@ import { generatedClaimPayment } from '../test/fixtures/claim-payment';
 test('Michal can generate, refine, preview and version a claim payment model', async ({ page }) => {
   let generationCount = 0;
   let created = false;
+  let firstChatRequirements = '';
   let providerSettings = { baseUrl: 'https://api.openai.com/v1', model: 'environment-model', apiKeyConfigured: true };
-  const longAssistantReply = `I added recovery transactions and updated the model definition. https://models.example/${'x'.repeat(600)}`;
+  const longAssistantReply = [
+    'I added recovery transactions and updated the model definition.',
+    ...Array.from({ length: 12 }, (_, index) => `Review note ${index + 1}: recovery detail ${'x'.repeat(48)}`),
+    `Reference: https://models.example/${'x'.repeat(600)}`,
+  ].join('\n');
   const project = {
     id: 'project-1',
     title: 'Claim Payment',
@@ -64,6 +69,8 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     if (path.endsWith('/chat') && method === 'POST') {
       const message = (request.postDataJSON() as { message: string }).message;
       const answeringQuestion = message.startsWith('Yes,');
+      if (!firstChatRequirements) firstChatRequirements = project.requirements;
+      await new Promise(resolve => setTimeout(resolve, 450));
       project.draft = {
         ...structuredClone(generatedClaimPayment),
         model: {
@@ -167,10 +174,13 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await expect(canvasContent).toHaveAttribute('data-offset-y', '0');
   const entityEditors = page.locator('details.entity-editor');
   await expect(entityEditors).toHaveCount(2);
-  await expect(entityEditors.nth(0)).toHaveAttribute('open', '');
+  await expect(entityEditors.nth(0)).not.toHaveAttribute('open', '');
   await expect(entityEditors.nth(1)).not.toHaveAttribute('open', '');
-  await entityEditors.nth(1).locator('summary').click();
-  await expect(page.getByLabel('Entity name Payment')).toBeVisible();
+  await expect(page.locator('details.relationship-editor')).not.toHaveAttribute('open', '');
+  await expect(page.locator('details.rule-editor')).not.toHaveAttribute('open', '');
+  await expect(page.locator('details.history-card')).not.toHaveAttribute('open', '');
+  await entityEditors.nth(0).locator('summary').click();
+  await expect(page.getByLabel('Entity name Claim')).toBeVisible();
 
   const chat = page.getByRole('region', { name: 'Model chat' });
   const editor = page.getByRole('region', { name: 'Structured model editor' });
@@ -183,9 +193,19 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   expect(outputBox && chatBox && editorBox && editorBox.y >= Math.max(outputBox.y + outputBox.height, chatBox.y + chatBox.height) - 1).toBeTruthy();
   expect(editorBox && reviewBox && reviewBox.y >= editorBox.y + editorBox.height - 1).toBeTruthy();
 
+  await expect(page.getByLabel('Persistent model instructions')).toHaveValue('Model claim payments for a large insurance organisation.');
+  await page.getByLabel('Persistent model instructions').fill('Model claim payments with a complete auditable payment history.');
+
   await page.getByLabel('Message the model assistant').fill('Yes, within the payment platform.');
   await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText('Yes, within the payment platform.')).toBeVisible();
+  await expect(page.getByText('Thinking...')).toBeVisible();
+  await expect(page.getByLabel('Message the model assistant')).toBeEnabled();
+  await page.getByLabel('Message the model assistant').fill('Draft the next request.');
   await expect(page.getByText('I applied the uniqueness requirement and cleared the question.')).toBeVisible();
+  expect(firstChatRequirements).toBe('Model claim payments with a complete auditable payment history.');
+  await expect(page.getByText('Thinking...')).toHaveCount(0);
+  await expect(page.getByLabel('Message the model assistant')).toHaveValue('Draft the next request.');
   await expect(page.getByText('Should an external payment reference be unique?')).toHaveCount(0);
   await expect(page.getByLabel('Canonical model business definition')).toHaveValue('Tracks claim payments with unique platform references.');
 
@@ -205,6 +225,10 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await expect(page.getByText(/I added recovery transactions and updated the model definition/u)).toBeVisible();
   await expect(page.getByLabel('Canonical model business definition')).toHaveValue('Tracks claims, payments and recovery transactions.');
   const latestAssistantMessage = page.locator('.chat-message.assistant').last();
+  const latestAssistantBody = latestAssistantMessage.locator('.chat-message-body');
+  await expect.poll(async () => latestAssistantBody.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  expect(await latestAssistantBody.evaluate(element => getComputedStyle(element).overflowY)).toBe('auto');
+  expect(await page.locator('.chat-transcript').evaluate(element => getComputedStyle(element).overflowY)).toBe('auto');
   await expect.poll(async () => {
     const messageBox = await latestAssistantMessage.boundingBox(), currentChatBox = await chat.boundingBox();
     return Boolean(messageBox && currentChatBox && messageBox.x + messageBox.width <= currentChatBox.x + currentChatBox.width + 1);
@@ -218,6 +242,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   expect([...new Set(buttonTypography)]).toEqual([buttonTypography[0]]);
 
   await page.getByRole('button', { name: 'Save version' }).click();
+  await page.getByText('Version history').click();
   await expect(page.getByText('Version 1')).toBeVisible();
   const mermaidLink = page.getByRole('link', { name: 'Download Mermaid v1' });
   const drawioLink = page.getByRole('link', { name: 'Download draw.io v1' });

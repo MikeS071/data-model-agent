@@ -230,19 +230,24 @@ export function ModelWorkbench() {
   const [providerSettings, setProviderSettings] = useState<ProviderSettingsView | null>(null);
   const [settingsStatus, setSettingsStatus] = useState('');
   const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
+  const [pendingChatMessage, setPendingChatMessage] = useState<ChatMessage | null>(null);
   const editRevision = useRef(0);
+  const chatTranscript = useRef<HTMLOListElement>(null);
 
   const refreshProjects = async () => setProjects(await requestJson<ProjectSummary[]>('/api/projects'));
   useEffect(() => { void refreshProjects().catch(error => setError(message(error))); }, []);
+  useEffect(() => { setExpandedEntities(new Set()); setPendingChatMessage(null); }, [project?.id]);
   useEffect(() => {
     if (!project?.draft) { setExpandedEntities(new Set()); return; }
     setExpandedEntities(current => {
       const valid = new Set(project.draft!.model.entities.map(entity => entity.id));
-      const next = new Set([...current].filter(id => valid.has(id)));
-      if (next.size === 0 && project.draft!.model.entities[0]) next.add(project.draft!.model.entities[0].id);
-      return next;
+      return new Set([...current].filter(id => valid.has(id)));
     });
-  }, [project?.id, project?.draft?.model.entities]);
+  }, [project?.draft?.model.entities]);
+  useEffect(() => {
+    if (!chatTranscript.current) return;
+    chatTranscript.current.scrollTop = chatTranscript.current.scrollHeight;
+  }, [project?.messages.length, pendingChatMessage]);
 
   useEffect(() => {
     if (!project?.draft || !dirty) return;
@@ -286,7 +291,7 @@ export function ModelWorkbench() {
   };
 
   const goHome = () => {
-    setView('workspace'); setProject(null); setIntake(emptyDraft); setError(''); setStatus('Ready'); setSettingsStatus('');
+    setView('workspace'); setProject(null); setIntake(emptyDraft); setPendingChatMessage(null); setError(''); setStatus('Ready'); setSettingsStatus('');
   };
 
   const openProviderSettings = async () => {
@@ -347,7 +352,7 @@ export function ModelWorkbench() {
     setError(''); setStatus('Preparing draft…');
     try {
       let target = project;
-      if (!target?.draft) target = await persistIntake();
+      if (!target?.draft || target.requirements !== intake.requirements) target = await persistIntake();
       setStatus('Generating with provider…');
       target = await requestJson<Project>(`/api/projects/${target.id}/generate`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clarification: null }),
@@ -401,7 +406,12 @@ export function ModelWorkbench() {
   };
 
   const sendChatMessage = async () => {
-    if (!project?.draft || !chatMessage.trim()) return;
+    const outgoingMessage = chatMessage.trim();
+    if (!project?.draft || !outgoingMessage || pendingChatMessage) return;
+    setPendingChatMessage({
+      id: `pending-${crypto.randomUUID()}`, role: 'user', content: outgoingMessage, createdAt: new Date().toISOString(),
+    });
+    setChatMessage('');
     setError(''); setStatus('Updating model with assistant…');
     try {
       if (dirty) {
@@ -410,12 +420,33 @@ export function ModelWorkbench() {
         });
         setDirty(false);
       }
+      if (intake.requirements !== project.requirements) await persistIntake();
       const updated = await requestJson<Project>(`/api/projects/${project.id}/chat`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: chatMessage }),
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: outgoingMessage }),
       });
-      setProject(updated); setChatMessage(''); setDirty(false); setStatus('Model updated from chat');
+      setProject(updated); setPendingChatMessage(null); setDirty(false); setStatus('Model updated from chat');
+      await refreshProjects().catch(() => undefined);
+    } catch (error) {
+      setPendingChatMessage(null);
+      setChatMessage(current => current.trim() ? current : outgoingMessage);
+      setError(message(error)); setStatus('Chat update stopped');
+    }
+  };
+
+  const saveModelInstructions = async () => {
+    if (!project?.draft || intake.requirements === project.requirements) return;
+    setError(''); setStatus('Saving instructions…');
+    try {
+      if (dirty) {
+        await requestJson(`/api/projects/${project.id}/draft`, {
+          method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(project.draft),
+        });
+        setDirty(false);
+      }
+      await persistIntake();
+      setStatus('Instructions saved');
       await refreshProjects();
-    } catch (error) { setError(message(error)); setStatus('Chat update stopped'); }
+    } catch (error) { setError(message(error)); setStatus('Instructions not saved'); }
   };
 
   const latest = project?.versions[0]?.versionNumber ?? null;
@@ -426,6 +457,7 @@ export function ModelWorkbench() {
   // Background draft persistence must not lock the editor or prevent an explicit
   // version save; saveVersion writes the latest in-memory draft before snapshotting.
   const busy = status.endsWith('…') && status !== 'Saving draft…';
+  const instructionsDirty = Boolean(project?.draft && intake.requirements !== project.requirements);
   return <main className="app-shell">
     <a className="skip-link" href="#work-area">Skip to work area</a>
     <header className="product-header">
@@ -488,18 +520,26 @@ export function ModelWorkbench() {
 
             <section className="panel assistant-card" role="region" aria-label="Model chat">
               <div className="section-heading"><div><span className="eyebrow">Model assistant</span><h2>Shape the model together</h2><p>Answer the next question or describe another change. Every successful reply updates the model.</p></div></div>
-              <ol className="chat-transcript" aria-live="polite">
-                {project.messages.map(item => <li className={`chat-message ${item.role}`} key={item.id}><span>{item.role === 'user' ? 'You' : 'Assistant'}</span><p>{item.content}</p></li>)}
-                {project.draft.clarificationQuestions[0] ? <li className="chat-message assistant clarification-prompt"><span>Next clarification</span><p>{project.draft.clarificationQuestions[0]}</p></li>
+              <ol className="chat-transcript" ref={chatTranscript} aria-live="polite" aria-relevant="additions">
+                {project.messages.map(item => <li className={`chat-message ${item.role}`} key={item.id}><span>{item.role === 'user' ? 'You' : 'Assistant'}</span><p className="chat-message-body">{item.content}</p></li>)}
+                {project.draft.clarificationQuestions[0] ? <li className="chat-message assistant clarification-prompt"><span>Next clarification</span><p className="chat-message-body">{project.draft.clarificationQuestions[0]}</p></li>
                   : project.messages.length === 0 && <li className="chat-empty">No open questions. Try “Add recovery transactions and explain the relationship.”</li>}
+                {pendingChatMessage && <>
+                  <li className="chat-message user pending" key={pendingChatMessage.id}><span>You</span><p className="chat-message-body">{pendingChatMessage.content}</p></li>
+                  <li className="chat-message assistant thinking" key={`${pendingChatMessage.id}-thinking`}><span>Assistant</span><p className="chat-message-body">Thinking...</p></li>
+                </>}
               </ol>
               <label>{project.draft.clarificationQuestions[0] ? 'Answer or request a change' : 'Message'}<textarea aria-label="Message the model assistant" value={chatMessage} maxLength={4000} rows={3} onChange={event => setChatMessage(event.target.value)} placeholder={project.draft.clarificationQuestions[0] ? 'Answer the question or describe another change…' : 'Describe the change you want…'} /></label>
-              <div className="chat-actions"><small>Your message, current model and source context are sent to the configured provider.</small><button className="primary-button" disabled={busy || !chatMessage.trim()} onClick={() => void sendChatMessage()}>Send message <Icon name="arrow" /></button></div>
+              <div className="chat-actions"><small>Your message, persistent instructions, current model and source context are sent to the configured provider.</small><button className="primary-button" disabled={busy || Boolean(pendingChatMessage) || !chatMessage.trim()} onClick={() => void sendChatMessage()}>Send message <Icon name="arrow" /></button></div>
             </section>
           </div>
 
           <section className="panel editor-card" role="region" aria-label="Structured model editor">
             <div className="section-heading"><div><span className="eyebrow">Canonical model</span><h2>Structured editor</h2><p>Edit the source of truth. Changes autosave to this working draft.</p></div><span className="count-badge">{project.draft.model.entities.length} entities · {project.draft.model.relationships.length} relationships</span></div>
+            <div className="model-instructions">
+              <label>Persistent model instructions<textarea aria-label="Persistent model instructions" value={intake.requirements} maxLength={20_000} rows={5} onChange={event => setIntake({ ...intake, requirements: event.target.value })} /></label>
+              <div className="model-instructions-actions"><p>These instructions ground every regeneration and assistant turn. Editing them alone does not contact the provider.</p><button className="secondary-button" disabled={busy || !instructionsDirty || !intake.requirements.trim()} onClick={() => void saveModelInstructions()}>{instructionsDirty ? 'Save instructions' : 'Instructions saved'}</button></div>
+            </div>
             <div className="model-fields">
               <label>Model name<input aria-label="Canonical model name" value={project.draft.model.name} onChange={event => updateModel(model => { model.name = event.target.value; })} /></label>
               <label>Business definition<textarea aria-label="Canonical model business definition" value={project.draft.model.businessDefinition} onChange={event => updateModel(model => { model.businessDefinition = event.target.value; })} rows={2} /></label>
@@ -558,10 +598,9 @@ export function ModelWorkbench() {
             <button className="secondary-button add-entity" onClick={() => {
               const id = crypto.randomUUID();
               updateModel(model => { const ordinal = model.entities.length + 1; model.entities.push({ id, name: `New Entity ${ordinal}`, businessDefinition: 'Define this entity.', position: { x: 80 + model.entities.length * 360, y: 360 }, attributes: [{ id: crypto.randomUUID(), name: 'id', dataType: 'uuid', required: true, key: 'PK', references: null, businessDefinition: 'Stable identifier.' }] }); });
-              setExpandedEntities(current => new Set(current).add(id));
             }}><Icon name="plus" />Add entity</button>
 
-            <div className="relationship-editor"><div className="editor-group-heading"><div><h3>Relationships</h3><p>Connect entities and make cardinality explicit.</p></div></div><div className="relationship-labels"><span>Name</span><span>From</span><span>Cardinality</span><span /><span>To</span><span>Cardinality</span><span /></div>{project.draft.model.relationships.map((relationship, index) => <div className="relationship-row" key={relationship.id}>
+            <details className="relationship-editor editor-disclosure"><summary><div className="editor-group-heading"><h3>Relationships</h3><p>Connect entities and make cardinality explicit.</p></div><span className="count-badge">{project.draft.model.relationships.length}</span><Icon name="chevron" /></summary><div className="editor-disclosure-body"><div className="relationship-labels"><span>Name</span><span>From</span><span>Cardinality</span><span /><span>To</span><span>Cardinality</span><span /></div>{project.draft.model.relationships.map((relationship, index) => <div className="relationship-row" key={relationship.id}>
               <input aria-label={`Relationship ${index + 1} name`} value={relationship.name} onChange={event => updateModel(model => { model.relationships[index].name = event.target.value; })} />
               <select aria-label={`Relationship ${index + 1} source`} value={relationship.fromEntityId} onChange={event => updateModel(model => { model.relationships[index].fromEntityId = event.target.value; })}>{project.draft!.model.entities.map(entity => <option value={entity.id} key={entity.id}>{entity.name}</option>)}</select>
               <select aria-label={`Relationship ${index + 1} source cardinality`} value={relationship.fromCardinality} onChange={event => updateModel(model => { model.relationships[index].fromCardinality = event.target.value as typeof relationship.fromCardinality; })}><option value="one">one</option><option value="zero-or-one">zero or one</option><option value="one-or-many">one or many</option><option value="zero-or-many">zero or many</option></select>
@@ -569,9 +608,9 @@ export function ModelWorkbench() {
               <select aria-label={`Relationship ${index + 1} target`} value={relationship.toEntityId} onChange={event => updateModel(model => { model.relationships[index].toEntityId = event.target.value; })}>{project.draft!.model.entities.map(entity => <option value={entity.id} key={entity.id}>{entity.name}</option>)}</select>
               <select aria-label={`Relationship ${index + 1} target cardinality`} value={relationship.toCardinality} onChange={event => updateModel(model => { model.relationships[index].toCardinality = event.target.value as typeof relationship.toCardinality; })}><option value="one">one</option><option value="zero-or-one">zero or one</option><option value="one-or-many">one or many</option><option value="zero-or-many">zero or many</option></select>
               <button className="icon-button destructive" aria-label={`Remove relationship ${relationship.name}`} onClick={() => updateModel(model => { model.relationships.splice(index, 1); })}><Icon name="trash" /></button>
-            </div>)}<button className="text-button editor-add" onClick={() => updateModel(model => model.relationships.push({ id: crypto.randomUUID(), name: `relationship_${model.relationships.length + 1}`, fromEntityId: model.entities[0].id, toEntityId: model.entities[1]?.id ?? model.entities[0].id, fromCardinality: 'one', toCardinality: 'zero-or-many' }))}><Icon name="plus" />Add relationship</button></div>
+            </div>)}<button className="text-button editor-add" onClick={() => updateModel(model => model.relationships.push({ id: crypto.randomUUID(), name: `relationship_${model.relationships.length + 1}`, fromEntityId: model.entities[0].id, toEntityId: model.entities[1]?.id ?? model.entities[0].id, fromCardinality: 'one', toCardinality: 'zero-or-many' }))}><Icon name="plus" />Add relationship</button></div></details>
 
-            <div className="rule-editor"><div className="editor-group-heading"><div><h3>Validation rules</h3><p>Keep business constraints beside the model they protect.</p></div></div>{project.draft.model.rules.map((rule, index) => <article className="rule-row" key={rule.id}>
+            <details className="rule-editor editor-disclosure"><summary><div className="editor-group-heading"><h3>Validation rules</h3><p>Keep business constraints beside the model they protect.</p></div><span className="count-badge">{project.draft.model.rules.length}</span><Icon name="chevron" /></summary><div className="editor-disclosure-body">{project.draft.model.rules.map((rule, index) => <article className="rule-row" key={rule.id}>
               <div className="rule-heading"><strong>Rule {String(index + 1).padStart(2, '0')}</strong><button className="icon-button destructive" aria-label={`Remove rule ${rule.name}`} onClick={() => updateModel(model => { model.rules.splice(index, 1); })}><Icon name="trash" /></button></div>
               <div className="rule-fields">
                 <label>Name<input aria-label={`Rule ${index + 1} name`} value={rule.name} onChange={event => updateModel(model => { model.rules[index].name = event.target.value; })} /></label>
@@ -582,12 +621,12 @@ export function ModelWorkbench() {
                 const ids = model.rules[index].entityIds;
                 model.rules[index].entityIds = event.target.checked ? [...new Set([...ids, item.id])] : ids.filter(id => id !== item.id);
               })} />{item.name}</label>)}</fieldset>
-            </article>)}<button className="text-button editor-add" onClick={() => updateModel(model => model.rules.push({ id: crypto.randomUUID(), name: `Rule ${model.rules.length + 1}`, expression: 'Define expression', businessDefinition: 'Define this validation rule.', entityIds: [model.entities[0].id] }))}><Icon name="plus" />Add validation rule</button></div>
+            </article>)}<button className="text-button editor-add" onClick={() => updateModel(model => model.rules.push({ id: crypto.randomUUID(), name: `Rule ${model.rules.length + 1}`, expression: 'Define expression', businessDefinition: 'Define this validation rule.', entityIds: [model.entities[0].id] }))}><Icon name="plus" />Add validation rule</button></div></details>
           </section>
 
-          <section className="panel history-card"><div className="section-heading"><div><span className="eyebrow">Review points</span><h2>Version history</h2><p>Freeze reviewed milestones and reopen an earlier version as a new working draft.</p></div></div>{latest && <div className="download-actions"><a download={`${downloadStem}-v${latest}.mmd`} href={`/api/projects/${project.id}/downloads/mermaid?version=${latest}`}>Download Mermaid v{latest}</a><a download={`${downloadStem}-v${latest}.drawio`} href={`/api/projects/${project.id}/downloads/drawio?version=${latest}`}>Download draw.io v{latest}</a></div>}
+          <details className="panel history-card editor-disclosure"><summary><div><span className="eyebrow">Review points</span><h2>Version history</h2><p>Freeze reviewed milestones and reopen an earlier version as a new working draft.</p></div><span className="count-badge">{project.versions.length}</span><Icon name="chevron" /></summary><div className="history-body">{latest && <div className="download-actions"><a download={`${downloadStem}-v${latest}.mmd`} href={`/api/projects/${project.id}/downloads/mermaid?version=${latest}`}>Download Mermaid v{latest}</a><a download={`${downloadStem}-v${latest}.drawio`} href={`/api/projects/${project.id}/downloads/drawio?version=${latest}`}>Download draw.io v{latest}</a></div>}
             {project.versions.length ? <ol className="version-list">{project.versions.map(version => <li key={version.id}><div><strong>Version {version.versionNumber}</strong><span>{new Date(version.createdAt).toLocaleString()}</span></div><button className="text-button" onClick={() => void continueVersion(version.versionNumber)}>Open as draft</button></li>)}</ol> : <p className="empty-copy">Save the reviewed draft to create version 1.</p>}
-          </section>
+          </div></details>
 
           <section className="review-grid bottom-review" role="region" aria-label="Assumptions and warnings">
             <div className="panel review-card"><span className="card-label">Assumptions</span>{project.draft.assumptions.length ? <ul>{project.draft.assumptions.map(item => <li key={item}>{item}</li>)}</ul> : <p>No assumptions recorded.</p>}</div>

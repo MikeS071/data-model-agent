@@ -15,6 +15,10 @@ The first worked example models Claim and Payment for a large insurance organisa
   working draft.
 - Answer one clarification question at a time through the same chat used for model
   changes; successful answers update the canonical draft.
+- Keep the original requirements editable as **Persistent model instructions** that
+  ground every later regeneration and assistant turn.
+- Read the complete scrollable project conversation while long assistant replies remain
+  contained in their own ten-line scroll area.
 - Edit model definitions, entities, attributes, keys, references, layout, relationships
   and validation rules in structured forms.
 - Edit the canonical structure below the live output, then review assumptions and
@@ -34,7 +38,7 @@ provider.
 
 The browser never receives the provider credential. The server validates structured model
 responses before storing them, and uploaded DDL or SQL is treated as text—it is never
-executed. Model-assistant messages, recent chat context and the current model are also
+executed. Model-assistant messages, recent chat context, persistent model instructions and the current model are also
 sent to the configured provider when you select **Send message**.
 
 ## Start the application
@@ -100,12 +104,17 @@ Open `http://127.0.0.1:3000`.
    to the next question. In either model view, scroll over the canvas to zoom and drag it
    with the primary mouse button to move around. The visible controls and the `+`, `-`,
    `0` and arrow keys provide equivalent keyboard operation.
-5. Refine the canonical model in the structured editor below the live output. Form changes
-   autosave. You can use the same chat at any time to request another model change.
+5. Refine **Persistent model instructions** at the top of the structured editor whenever
+   the project's durable brief changes. Save them directly, or select **Regenerate** or
+   **Send message** to save them before that provider request. Editing the instructions by
+   itself does not contact the provider. Expand the initially collapsed entity,
+   relationship and validation-rule groups you need; form changes autosave. You can use
+   the same chat at any time to request another model change.
 6. Expand **Canonical JSON · read only** when you need to inspect the underlying model,
    and review the assumptions and warnings in the final section at the bottom.
-7. Select **Save version** when the draft is ready for review. Download either format or
-   choose **Open as draft** on a historical version to continue from it.
+7. Select **Save version** when the draft is ready for review. Expand the initially
+   collapsed **Version history** to download either format or choose **Open as draft** on
+   a historical version to continue from it.
 
 If generation fails, the project, requirements and source files remain saved. A timeout,
 rate limit, incomplete output, provider failure or invalid configuration is reported as a

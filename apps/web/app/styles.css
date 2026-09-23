@@ -154,6 +154,9 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
 .chat-message p { font-size: .78rem; line-height: 1.5; margin: 0; max-width: 100%; overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
 .chat-message.user { background: var(--primary-soft); color: var(--primary-strong); justify-self: end; }
 .chat-message.assistant { background: var(--surface-subtle); border: 1px solid var(--border); justify-self: start; }
+.chat-message.assistant .chat-message-body { max-height: calc(1.5em * 10); overflow-y: auto; overscroll-behavior: contain; padding-right: 3px; scrollbar-gutter: stable; }
+.chat-message.pending { opacity: .82; }
+.chat-message.thinking { border-style: dashed; color: var(--muted); }
 .chat-message.clarification-prompt { background: #eef8fc; border-color: #8bc9e5; box-shadow: inset 3px 0 0 var(--primary); }
 .chat-message.clarification-prompt span { color: var(--primary-strong); }
 .chat-empty { align-self: center; color: var(--muted); font-size: .78rem; line-height: 1.55; padding: 20px; text-align: center; }
@@ -161,6 +164,11 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
 .chat-actions { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
 .chat-actions small { color: var(--muted); font-size: .66rem; line-height: 1.4; }
 
+.model-instructions { background: var(--primary-soft); border: 1px solid #7dd3fc; border-radius: 9px; margin-bottom: 18px; padding: 14px; }
+.model-instructions label { color: var(--primary-strong); margin: 0; }
+.model-instructions-actions { align-items: center; display: flex; gap: 16px; justify-content: space-between; margin-top: 10px; }
+.model-instructions-actions p { color: var(--muted); font-size: .73rem; line-height: 1.5; margin: 0; max-width: 680px; }
+.model-instructions-actions button { flex: none; }
 .model-fields { display: grid; gap: 12px; grid-template-columns: minmax(180px, .75fr) minmax(260px, 1.25fr); margin-bottom: 18px; }
 .model-fields label { margin: 0; }
 .entity-grid { display: grid; gap: 10px; }
@@ -188,7 +196,13 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
 .attribute-definition { font-size: .73rem; min-height: 34px; width: 100%; }
 .no-reference { color: var(--muted); font-size: .8rem; text-align: center; }
 .add-entity { gap: 6px; margin-top: 13px; }
-.relationship-editor, .rule-editor { border-top: 1px solid var(--border); margin-top: 26px; padding-top: 21px; }
+.relationship-editor, .rule-editor { background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 9px; margin-top: 18px; overflow: clip; }
+.editor-disclosure > summary { align-items: center; cursor: pointer; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) auto auto; list-style: none; min-height: 68px; padding: 13px 15px; }
+.editor-disclosure > summary::-webkit-details-marker { display: none; }
+.editor-disclosure > summary:hover { background: #edf6fa; }
+.editor-disclosure > summary .icon { color: var(--muted); transition: transform .15s ease; }
+.editor-disclosure[open] > summary .icon { transform: rotate(180deg); }
+.editor-disclosure-body { border-top: 1px solid var(--border); padding: 14px 15px 16px; }
 .editor-group-heading h3 { font-size: 1.05rem; margin: 0 0 4px; }
 .relationship-labels, .relationship-row { align-items: center; display: grid; gap: 6px; grid-template-columns: .9fr .9fr .94fr 22px .9fr .94fr 34px; }
 .relationship-labels { color: var(--muted); font-size: .58rem; font-weight: 800; letter-spacing: .05em; margin-top: 14px; padding: 0 2px; text-transform: uppercase; }
@@ -236,6 +250,11 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
 .download-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 13px; }
 .download-actions a { background: var(--primary-soft); border-radius: 6px; color: var(--primary-strong); font-size: .68rem; font-weight: 800; padding: 7px 9px; text-decoration: none; }
 .download-actions a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.history-card.editor-disclosure { overflow: clip; padding: 0; }
+.history-card > summary { padding: clamp(18px, 2.5vw, 26px); }
+.history-card > summary h2 { font-size: 1.3rem; letter-spacing: -.025em; line-height: 1.2; margin: 5px 0; }
+.history-card > summary p { color: var(--muted); font-size: .8rem; line-height: 1.5; margin: 0; }
+.history-body { border-top: 1px solid var(--border); padding: 18px clamp(18px, 2.5vw, 26px) 22px; }
 .version-list { display: grid; gap: 7px; list-style: none; margin: 0; padding: 0; }
 .version-list li { align-items: center; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 7px; display: flex; justify-content: space-between; padding: 10px 12px; }
 .version-list li div { display: grid; gap: 2px; }
@@ -280,6 +299,7 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
   .section-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
   .count-badge { white-space: normal; }
   .model-fields, .rule-fields { grid-template-columns: 1fr; }
+  .model-instructions-actions { align-items: flex-start; flex-direction: column; }
   .position-fields { grid-template-columns: 1fr 1fr; }
   .entity-editor > summary { grid-template-columns: 68px 1fr auto; padding: 10px; }
   .attribute-labels, .relationship-labels { display: none; }
