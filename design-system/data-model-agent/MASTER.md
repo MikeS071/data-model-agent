@@ -94,12 +94,18 @@ on color alone.
   bubbles have a shrinkable inline size and wrap long tokens with `overflow-wrap: anywhere`
   so generated text can never widen its panel.
 - Keep the complete persisted chat transcript in a bounded vertical scroll region. Limit
-  each assistant message body to ten visible rendered lines and give longer replies their
-  own vertical scroll without clipping or truncating text.
+  every human and assistant message body, including clarification questions and answers,
+  to ten visible rendered lines and give longer turns their own vertical scroll without
+  clipping or truncating text. Grid/list rows must retain their content height so the
+  transcript itself develops real overflow; nested reply scrolling hands off to transcript
+  scrolling at the reply boundary.
 - A sent user message appears immediately as a transient bubble. Show one adjacent,
   screen-reader-announced `Thinking...` assistant bubble until the request settles. Keep
   the composer usable for drafting the next message, while preventing a second concurrent
   model mutation from racing the first.
+- Make the thinking bubble visibly active with one restrained surface pulse and staggered
+  dots. Animate only opacity and transforms and stop the animation under
+  `prefers-reduced-motion`, leaving a static visible and announced status.
 - Use a `grab` cursor at rest and `grabbing` while panning, suppress text selection during
   a drag, and reset the viewport when the representation changes.
 - Hover and focus transitions use 150–200ms. Never move layout on hover.

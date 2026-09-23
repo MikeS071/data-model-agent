@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 10
+revision: 11
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -93,8 +93,13 @@ The canvas defaults and resets to 50% scale, can zoom out further for large mode
 taller on desktop. Chat messages must shrink within their panel and wrap long tokens rather
 than expanding the collaboration grid or creating horizontal overflow. The complete
 persisted transcript remains available in one bounded, vertically scrollable region. An
-assistant message may show up to ten rendered lines before its own body scrolls, so a long
-reply cannot push the composer out of reach and no response text is discarded.
+message from either the human or assistant, including clarification questions and answers,
+expands to a full ten-rendered-line reading surface before its own body scrolls, so a long
+turn cannot push the composer out of reach and no conversation text is discarded.
+Transcript rows retain their content height instead of shrinking to fit the viewport; once
+their combined height exceeds the bounded message area, that area scrolls independently
+and the newest turn is brought into view. Scrolling a long message body can hand off to
+transcript scrolling at its boundary rather than trapping the wheel.
 
 Sending a chat message creates a transient user bubble immediately and clears the
 composer for the next thought. A separate assistant bubble with an atomic polite
@@ -104,6 +109,10 @@ draft, but the transcript, composer and rest of the page remain usable. Success 
 the transient turn with the atomically persisted user and assistant messages. Failure
 removes the transient status, restores the sent text when the composer is still empty,
 and leaves the persisted transcript and canonical model unchanged.
+The thinking bubble uses a restrained surface pulse and animated activity dots to show
+continued work during slow requests. Motion uses opacity and transforms only; under
+`prefers-reduced-motion: reduce`, the animation stops while the visible and announced
+status remains.
 
 ## Alternatives considered
 
@@ -347,6 +356,7 @@ of scope.
 | D-020 | Use a collapsible workspace navigation rail, make the brand a home action, enlarge the visualization, reset it to 50%, and constrain chat content to the panel. | The model is the primary work surface and should gain space without sacrificing discoverable navigation or readable conversation. | Keep the permanent 240px panel; hide navigation entirely; add a separate route for every view. | Desktop collapse state remains local UI state with labelled icon controls, narrow screens keep a full-width menu, the live-output column receives the recovered width, and long user/provider content wraps without page overflow. |
 | D-021 | Make chat sends optimistic with one live thinking turn, bound long assistant bubbles to ten visible lines, and collapse every structured-editor group and history by default. | The user needs immediate acknowledgement, an unbroken readable transcript and a compact work surface without losing content or model-update safety. | Wait silently for the provider; truncate long replies; leave the first entity and secondary editors open; allow concurrent model mutations. | Transient chat state is distinct from persisted history, failure restores unsent work safely, one provider revision runs at a time, native disclosures remain keyboard operable, and behavioral tests cover pending, success, failure and initial collapsed state. |
 | D-022 | Treat the original requirements as editable Persistent model instructions throughout the working-draft lifecycle. | The model needs a durable human-authored brief that can evolve with the project and consistently ground regeneration and chat. | Hide requirements after generation; copy them into chat manually; apply edits immediately by calling the provider. | Instruction edits persist without contacting the provider, their saved state is visible, and any unsaved edit is stored before the next regenerate or chat request. |
+| D-023 | Size transcript rows to their content, give long human, assistant and clarification messages a ten-line reading surface, and animate the in-flight thinking status with reduced-motion support. | The existing grid compressed rows until the transcript never overflowed, clipping large bubbles and making a nominal scroll region inert. Slow provider calls also need continuous, purposeful feedback. | Add another overflow declaration without changing grid sizing; show a static status; let long messages grow without bounds. | The transcript becomes independently scrollable, nested message scrolling hands off at its boundary, long bubbles remain readable without dominating the panel, and activity motion remains accessible. |
 
 ## Approval
 
@@ -388,3 +398,7 @@ editable and act like a system prompt. That direct product decision accepts revi
 and D-022: the requirements become Persistent model instructions used by every later
 generation and chat turn, without becoming an executable or privileged provider-system
 message and without changing the accepted request boundaries.
+Michal then reported that long message bubbles on both sides were not large enough, the
+thinking state felt static, and the message area did not actually scroll. That direct interaction
+decision accepts revision 11 and D-023. It refines the existing chat contract without
+changing provider, persistence or request semantics.
