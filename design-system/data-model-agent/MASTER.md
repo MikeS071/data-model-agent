@@ -29,8 +29,9 @@ typography guidance with the matched Data-Dense Dashboard and Minimalism & Swiss
   the same canonical model as any other conversational change.
 - Put the full-width structured editor below the live-output/chat row, followed by version
   history, with assumptions and warnings as the final review section.
-- Collapse entity detail behind accessible summaries; show identity and field counts when
-  collapsed. Relationships and rules remain separate, clearly titled editor groups.
+- Collapse every entity, relationships, validation rules and version history initially
+  behind native accessible summaries. Show names and item counts while collapsed so the
+  workbench stays scannable without hiding what each disclosure contains.
 - Below 1100px, stack live output, chat, editor, history and review in that reading order.
   Below 760px, turn model navigation into a normal flow section and use single-column
   form rows.
@@ -88,6 +89,13 @@ on color alone.
 - The visualization defaults and resets to 50% and uses a taller desktop viewport. Chat
   bubbles have a shrinkable inline size and wrap long tokens with `overflow-wrap: anywhere`
   so generated text can never widen its panel.
+- Keep the complete persisted chat transcript in a bounded vertical scroll region. Limit
+  each assistant message body to ten visible rendered lines and give longer replies their
+  own vertical scroll without clipping or truncating text.
+- A sent user message appears immediately as a transient bubble. Show one adjacent,
+  screen-reader-announced `Thinking...` assistant bubble until the request settles. Keep
+  the composer usable for drafting the next message, while preventing a second concurrent
+  model mutation from racing the first.
 - Use a `grab` cursor at rest and `grabbing` while panning, suppress text selection during
   a drag, and reset the viewport when the representation changes.
 - Hover and focus transitions use 150–200ms. Never move layout on hover.

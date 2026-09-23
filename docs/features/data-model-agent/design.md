@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 8
+revision: 9
 status: accepted
 slug: data-model-agent
 requestRevision: 1
@@ -71,8 +71,9 @@ The saved-model workspace is a keyboard-operable collapsible sidebar: collapsing
 an icon rail and gives the workbench and live output the recovered width. Settings is a
 first-class sidebar destination rather than a hidden environment-only task.
 Entity details use accessible progressive
-disclosure so a large model remains scannable, while relationships, rules, preview,
-downloads and version history remain discoverable. Semantic colors, persistent labels,
+disclosure so a large model remains scannable. Every entity, the relationships editor,
+validation rules and version history are collapsed initially and use native summaries
+that retain their names and item counts. Semantic colors, persistent labels,
 native controls, visible focus, live status and reduced-motion behavior are required.
 All buttons share one font family, weight, sizing rhythm, radius and focus treatment;
 semantic variants change color without changing their typographic character. Both model
@@ -82,7 +83,19 @@ focusable arrow and zoom keys provide non-drag alternatives. Switching represent
 resets the viewport so an off-screen pan cannot make the next model appear empty.
 The canvas defaults and resets to 50% scale, can zoom out further for large models, and is
 taller on desktop. Chat messages must shrink within their panel and wrap long tokens rather
-than expanding the collaboration grid or creating horizontal overflow.
+than expanding the collaboration grid or creating horizontal overflow. The complete
+persisted transcript remains available in one bounded, vertically scrollable region. An
+assistant message may show up to ten rendered lines before its own body scrolls, so a long
+reply cannot push the composer out of reach and no response text is discarded.
+
+Sending a chat message creates a transient user bubble immediately and clears the
+composer for the next thought. A separate assistant bubble with an atomic polite
+`Thinking...` status remains visible for the lifetime of the provider request. One model
+mutation is allowed in flight to prevent stale responses from overwriting the canonical
+draft, but the transcript, composer and rest of the page remain usable. Success replaces
+the transient turn with the atomically persisted user and assistant messages. Failure
+removes the transient status, restores the sent text when the composer is still empty,
+and leaves the persisted transcript and canonical model unchanged.
 
 ## Alternatives considered
 
@@ -251,6 +264,9 @@ settings. A configured endpoint that does not support the expected Responses API
 a typed provider error while saved work remains available. The same typed provider
 failures apply to chat. A failed, incomplete or invalid chat
 response leaves both the current draft and transcript unchanged, making retry explicit.
+The optimistic user bubble and thinking indicator are presentation-only and are removed
+on failure; the submitted text is restored to the composer when that does not overwrite a
+newer draft message.
 
 Malformed or schema-invalid model output is never stored as a canonical model; validation
 details become a bounded error and may drive a new generation attempt. Domain ambiguity
@@ -321,6 +337,7 @@ of scope.
 | D-018 | Wrap Mermaid and draw.io in one bounded interactive canvas with pointer-centred wheel zoom, drag panning, visible zoom/reset buttons and keyboard equivalents. | Large insurance models must remain inspectable without page-level overflow, while dragging cannot be the only way to navigate. | Keep scrollbars only; add interaction to just one representation; depend on a diagramming library. | Both formats share identical viewport behavior, scale is bounded, mode changes reset the view, controls have accessible names, and browser tests exercise real mouse and keyboard input. |
 | D-019 | Persist a validated non-secret base URL and model for an OpenAI-compatible Responses API while keeping the API key environment-only. | Selecting another compatible provider must not require source edits or put credentials in the browser/database. | Keep all settings environment-only; store API keys in SQLite; implement multiple provider-specific adapters now. | Settings affect subsequent requests, use an idempotent singleton row, clearly disclose the configured destination, and reject invalid URLs/models without overwriting the last valid values. |
 | D-020 | Use a collapsible workspace navigation rail, make the brand a home action, enlarge the visualization, reset it to 50%, and constrain chat content to the panel. | The model is the primary work surface and should gain space without sacrificing discoverable navigation or readable conversation. | Keep the permanent 240px panel; hide navigation entirely; add a separate route for every view. | Desktop collapse state remains local UI state with labelled icon controls, narrow screens keep a full-width menu, the live-output column receives the recovered width, and long user/provider content wraps without page overflow. |
+| D-021 | Make chat sends optimistic with one live thinking turn, bound long assistant bubbles to ten visible lines, and collapse every structured-editor group and history by default. | The user needs immediate acknowledgement, an unbroken readable transcript and a compact work surface without losing content or model-update safety. | Wait silently for the provider; truncate long replies; leave the first entity and secondary editors open; allow concurrent model mutations. | Transient chat state is distinct from persisted history, failure restores unsent work safely, one provider revision runs at a time, native disclosures remain keyboard operable, and behavioral tests cover pending, success, failure and initial collapsed state. |
 
 ## Approval
 
@@ -352,3 +369,8 @@ a collapsible workspace menu, a larger 50%-default canvas, bounded chat messages
 clickable home brand labelled Data Model Design Space. That direct feature decision
 accepts revision 8 with D-019 and D-020. The API key remains server-only, and compatibility
 is limited to providers implementing the expected OpenAI Responses API contract.
+Michal then explicitly required a fully scrollable chat transcript, ten-line scrollable
+assistant replies, immediate user-message feedback with a live thinking bubble, and
+initially collapsed entities, relationships, validation rules and version history. That
+direct interaction decision accepts revision 9 and D-021 without changing the accepted
+request, provider boundary or atomic model-update rules.
