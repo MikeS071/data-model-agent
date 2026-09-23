@@ -3,7 +3,7 @@
     "schemaVersion": 1,
     "project": {
       "schemaVersion": 1,
-      "repository": "YourOrg/data-model-agent",
+      "repository": "MikeS071/data-model-agent",
       "branchPrefixes": ["feature", "fix", "chore"]
     },
     "baseBranch": "main",

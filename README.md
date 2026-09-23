@@ -1,158 +1,212 @@
+<div align="center">
+
 # Data Model Agent
 
-A local, single-user pilot for turning insurance requirements and existing technical
-artifacts into one reviewed canonical data model. The application derives Mermaid ER and
-draw.io representations from that model, so both exports stay aligned.
+Turn requirements and existing schemas into reviewable, versioned data models with
+consistent Mermaid and draw.io outputs.
 
-The first worked example models Claim and Payment for a large insurance organisation.
+[![CI](https://github.com/MikeS071/data-model-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/MikeS071/data-model-agent/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/MikeS071/data-model-agent?sort=semver)](https://github.com/MikeS071/data-model-agent/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-0f766e.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20.9-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org/)
 
-## What you can do
+[Getting started](#getting-started) · [Usage](#usage) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Releases](https://github.com/MikeS071/data-model-agent/releases)
 
-- Start from free-form requirements and `.md`, `.txt`, `.sql`, `.ddl` or `.json` files.
-- Save, reopen, edit or delete a model before making any provider request.
-- Generate a structured draft through a server-side OpenAI-compatible Responses API.
-- Work with the live model output and project assistant side by side at the top of the
-  working draft.
-- Answer one clarification question at a time through the same chat used for model
-  changes; successful answers update the canonical draft.
-- Keep the original requirements editable as **Persistent model instructions** that
-  ground every later regeneration and assistant turn.
-- Read the complete scrollable project conversation while long human, assistant and
-  clarification messages remain contained in their own ten-line scroll area.
-- Edit model definitions, entities, attributes, keys, references, layout, relationships
-  and validation rules in structured forms.
-- Edit the canonical structure below the live output, then review assumptions and
-  warnings at the bottom of the workbench.
-- Autosave a working draft and deliberately create immutable versions.
-- Preview and download Mermaid and draw.io output from the same canonical model.
-- Reopen a saved version as a new working draft without changing its history.
+</div>
 
-## Before you run it
+## Purpose
 
-This is a local pilot, not a shared or production service. It has no authentication and
-stores source material and models in an unencrypted local SQLite file. Clicking
-**Generate** sends the entered requirements and attached source text to the provider selected
-in **Settings**. Use only
-data that your organisation permits you to store locally and send to the configured
-provider.
+Data Model Agent is a local-first modelling workspace for turning incomplete business
+requirements, schemas, DDL and documentation into one editable canonical data model.
+It combines structured editing with an AI-assisted clarification workflow, then derives
+Mermaid ER and draw.io representations from the same source of truth.
 
-The browser never receives the provider credential. The server validates structured model
-responses before storing them, and uploaded DDL or SQL is treated as text—it is never
-executed. Model-assistant messages, recent chat context, persistent model instructions and the current model are also
-sent to the configured provider when you select **Send message**.
+The included pilot is designed around claim-payment modelling for a large insurance
+organisation. The modelling workflow is reusable, but the current application is a
+single-user local pilot—not a production multi-user service.
 
-## Start the application
+## Highlights
 
-Requirements: Node.js, pnpm and an OpenAI API key.
+- Start with free-form requirements and `.md`, `.txt`, `.sql`, `.ddl` or `.json` files.
+- Save, reopen, edit or delete a model before making a provider request.
+- Generate and refine a validated canonical model through an OpenAI-compatible Responses
+  API.
+- Work with a pannable, zoomable model canvas and the model assistant side by side.
+- Answer one critical clarification question at a time; successful answers update the
+  canonical model.
+- Keep the original requirements editable as persistent model instructions.
+- Edit entities, attributes, keys, references, cardinalities, rules and layout metadata in
+  structured forms.
+- Save immutable review versions and reopen any version as a new working draft.
+- Preview and download equivalent Mermaid ER and draw.io representations.
+- Keep long human, assistant and clarification messages readable with bounded scrolling.
 
-```sh
-cd /home/mikes/projects/self-verify/data-model-agent
-pnpm install
-cp apps/web/.env.example apps/web/.env.local
+## How it works
+
+```mermaid
+flowchart LR
+    A[Requirements and source files] --> B[Next.js application]
+    B --> C[OpenAI-compatible provider]
+    C --> D[Validated canonical model]
+    B --> E[(Local SQLite)]
+    D --> E
+    D --> F[Mermaid ER]
+    D --> G[draw.io XML]
+    H[Structured editor and chat] --> B
 ```
 
-Edit `apps/web/.env.local`:
+The browser never receives the provider credential. DDL and SQL inputs are treated as
+inert text and are never executed. Provider responses are validated before they replace
+the saved working draft.
 
-```dotenv
-OPENAI_API_KEY=your-key
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=your-approved-model
-OPENAI_TIMEOUT_MS=120000
-OPENAI_REASONING_EFFORT=low
-OPENAI_MAX_OUTPUT_TOKENS=8000
-DATA_MODEL_DB_FILE=data-model-agent.db
-```
+## Technology
 
-`OPENAI_BASE_URL` and `OPENAI_MODEL` are initial defaults rather than values hard-coded in
-the project. In the app, open **Settings** from the workspace sidebar to select another
-OpenAI-compatible Responses API base URL and model. The non-secret URL and model are saved
-locally and apply to the next generation or chat request without a restart. The API key
-remains server-side in `OPENAI_API_KEY`; it cannot be viewed or changed in the browser.
+- Next.js 16 and React 19
+- TypeScript
+- Node.js built-in SQLite
+- Mermaid
+- OpenAI-compatible Responses API
+- Vitest, Testing Library and Playwright
+- dev-stack governance and self-verification records
 
-Generation allows two minutes by default and uses low reasoning effort so normal model
-work is not cut off by the former 45-second deadline. `OPENAI_MAX_OUTPUT_TOKENS` bounds
-the combined reasoning and visible response budget. If a valid request reports
-`provider-output-incomplete`, raise this value in measured increments; if the provider
-reports `provider-timeout`, raise `OPENAI_TIMEOUT_MS` only after checking the server log
-for the safe request duration and provider request ID. Restart the server after changing
-server-only environment settings.
+## Getting started
 
-`DATA_MODEL_DB_FILE` is only a filename; the application keeps it under
-`apps/web/data/`, which is excluded from Git.
+### Prerequisites
 
-Start the local server:
+- Node.js 20.9 or newer; Node.js 22 LTS is recommended.
+- pnpm 10.32.1.
+- An API key and model name for OpenAI or another compatible Responses API provider.
+- Chrome for the end-to-end browser test.
 
-```sh
-pnpm dev
-```
+### Installation
 
-Open `http://127.0.0.1:3000`.
+1. Clone the repository.
 
-## Run the Claim Payment workflow
+   ```sh
+   git clone https://github.com/MikeS071/data-model-agent.git
+   cd data-model-agent
+   ```
 
-1. Select **New model**, name the model `Claim Payment`, and describe the insurance claim
-   payment domain in **Requirements**. Select **Save model** whenever you want to keep the
-   intake without contacting OpenAI; you can reopen, edit or delete it before generation.
-2. Attach any available Markdown, schema, SQL, DDL or JSON files. The UI shows every
-   accepted source before generation.
-3. Select **Generate draft**. Review the visible transmission notice first.
-4. Collapse the workspace sidebar when you want the live model to use more of the screen.
-   The canvas starts at 50% zoom. Work across the top row: compare the live Mermaid or draw.io output with the **Model
-   assistant** beside it. If the assistant shows **Next clarification**, answer directly
-   in the chat box and select **Send message**. The answer and the pending question are
-   sent with the current model; a successful reply updates the validated draft and moves
-   to the next question. In either model view, scroll over the canvas to zoom and drag it
-   with the primary mouse button to move around. The visible controls and the `+`, `-`,
-   `0` and arrow keys provide equivalent keyboard operation.
-5. Refine **Persistent model instructions** at the top of the structured editor whenever
-   the project's durable brief changes. Save them directly, or select **Regenerate** or
-   **Send message** to save them before that provider request. Editing the instructions by
-   itself does not contact the provider. Expand the initially collapsed entity,
-   relationship and validation-rule groups you need; form changes autosave. You can use
-   the same chat at any time to request another model change.
-6. Expand **Canonical JSON · read only** when you need to inspect the underlying model,
-   and review the assumptions and warnings in the final section at the bottom.
-7. Select **Save version** when the draft is ready for review. Expand the initially
-   collapsed **Version history** to download either format or choose **Open as draft** on
-   a historical version to continue from it.
+2. Enable the package manager and install dependencies.
 
-If generation fails, the project, requirements and source files remain saved. A timeout,
-rate limit, incomplete output, provider failure or invalid configuration is reported as a
-specific error code. Correct the provider setting or retry later; a failed call does not
-create a version. Server diagnostics contain timing, status, model configuration and the
-provider request ID, but never the API key, requirements or source content.
+   ```sh
+   corepack enable
+   pnpm install --frozen-lockfile
+   ```
 
-## Verify the pilot
+3. Create the local environment file.
 
-No test makes a live OpenAI call. Provider behavior is simulated at the server boundary,
-and the browser journey uses deterministic API responses.
+   ```sh
+   cp apps/web/.env.example apps/web/.env.local
+   ```
+
+4. Set at least `OPENAI_API_KEY` and `OPENAI_MODEL` in
+   `apps/web/.env.local`.
+
+   ```dotenv
+   OPENAI_API_KEY=your-provider-key
+   OPENAI_BASE_URL=https://api.openai.com/v1
+   OPENAI_MODEL=your-approved-model
+   OPENAI_TIMEOUT_MS=120000
+   OPENAI_REASONING_EFFORT=low
+   OPENAI_MAX_OUTPUT_TOKENS=8000
+   DATA_MODEL_DB_FILE=data-model-agent.db
+   ```
+
+5. Start the application.
+
+   ```sh
+   pnpm dev
+   ```
+
+6. Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
+
+`OPENAI_BASE_URL` and `OPENAI_MODEL` provide the initial settings. You can change both
+from the application's **Settings** panel without restarting. The API key remains a
+server-side environment variable and is never displayed or stored by the settings UI.
+
+## Configuration
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `OPENAI_API_KEY` | Yes | — | Server-side credential for the configured provider. |
+| `OPENAI_BASE_URL` | No | `https://api.openai.com/v1` | Initial OpenAI-compatible API base URL. |
+| `OPENAI_MODEL` | Yes | — | Initial provider model name. |
+| `OPENAI_TIMEOUT_MS` | No | `120000` | Maximum duration of a generation or chat request. |
+| `OPENAI_REASONING_EFFORT` | No | `low` | Reasoning effort sent to compatible providers. |
+| `OPENAI_MAX_OUTPUT_TOKENS` | No | `8000` | Combined response budget for a provider request. |
+| `DATA_MODEL_DB_FILE` | No | `data-model-agent.db` | SQLite filename under `apps/web/data/`. |
+
+## Usage
+
+1. Select **New model**, enter a model name and describe the domain in **Requirements**.
+2. Attach any relevant Markdown, schema, SQL, DDL or JSON files.
+3. Choose **Save model** to keep the intake without contacting the provider, or
+   **Generate draft** to create the first canonical model.
+4. Review the live Mermaid or draw.io view alongside the model assistant. Answer the
+   displayed clarification question or request another change in chat.
+5. Refine the persistent model instructions and structured model fields. Draft edits
+   autosave locally.
+6. Review assumptions, warnings and canonical JSON before selecting **Save version**.
+7. Download Mermaid or draw.io from version history, or reopen a prior version as a new
+   draft.
+
+Generation and assistant messages send the current requirements, source context and model
+to the configured provider. Use only information your organisation permits you to store
+locally and transmit to that provider.
+
+## Development and verification
 
 ```sh
 pnpm test
+pnpm --dir apps/web exec tsc --noEmit
 pnpm build
 pnpm test:e2e
 ```
 
-The browser test starts a local Next.js server and needs an installed Chrome browser.
-The lower-level suite covers source normalization, canonical validation, provider generation
-and chat contracts, atomic transcript persistence, immutable versions and both renderers.
+Tests use deterministic provider substitutes and never make a live paid model call. The
+GitHub Actions workflow runs the unit tests, TypeScript check and production build. Run
+the Playwright workflow locally when changing interactive behavior.
 
-## Data and recovery
-
-Stop the application before copying or replacing its SQLite file. To start again without
-destroying the old pilot data, move `apps/web/data/data-model-agent.db` and its optional
-`-wal`/`-shm` companions to a dated backup directory, then restart the application.
-
-Production use needs a new accepted request and design covering authentication,
-authorization, retention, encryption, approved provider configuration, monitoring and
-deployment.
-
-## Accepted scope and design
-
-The human-readable two-gate records are:
+The accepted request and design are retained in:
 
 - [`docs/features/data-model-agent/request.md`](docs/features/data-model-agent/request.md)
 - [`docs/features/data-model-agent/design.md`](docs/features/data-model-agent/design.md)
 
-New features and fixes should advance these records when they materially change intent or
-architecture; they should not rewrite the accepted history silently.
+## Data, privacy and recovery
+
+The pilot has no authentication and stores model content in an unencrypted local SQLite
+database. It is suitable for controlled local evaluation, not production or shared use.
+
+Stop the application before backing up or replacing the database. Copy
+`apps/web/data/data-model-agent.db` and any matching `-wal` or `-shm` files together. The
+entire `apps/web/data/` directory, local environment files and provider credentials are
+excluded from Git.
+
+Production adoption requires an explicit design covering authentication, authorization,
+encryption, retention, provider governance, monitoring and deployment.
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the development
+workflow and pull-request checklist. Use
+[GitHub Issues](https://github.com/MikeS071/data-model-agent/issues) for reproducible bugs
+and focused feature proposals.
+
+## Security
+
+Do not report vulnerabilities in public issues. Follow the private reporting process in
+[SECURITY.md](SECURITY.md), and never include provider keys, proprietary schemas or live
+organisational data in a report.
+
+## License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for the complete terms.
+
+## Acknowledgements
+
+- README structure inspired by the
+  [Best README Template](https://github.com/othneildrew/Best-README-Template).
+- Project governance is based on
+  [dev-stack](https://github.com/EtnaJamesCapital/dev-stack).
