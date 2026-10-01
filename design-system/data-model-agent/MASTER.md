@@ -1,5 +1,22 @@
 # Data Model Agent UI design system
 
+The application uses the AustralianSuper `AS Theme 2023` identity from the approved
+AustralianSuper PowerPoint template. The compact application header retains the product
+name at left and displays the approved full AustralianSuper purple/orange wordmark at right.
+
+UI/UX Pro Max selects **Data-Dense Dashboard** as the product pattern. Apply it with
+AustralianSuper's approved custom tints rather than the skill's generic blue dashboard
+palette: soft neutral framing, compact information hierarchy, progressive disclosure,
+restrained elevation and pastel brand surfaces. Reserve full-strength purple/orange for
+the official logo, keyboard focus and small interaction accents; avoid large saturated
+blocks or high-contrast decorative treatments.
+
+Impeccable 4.1.0 at reviewed commit `0d6b47e` classifies the workbench as an **Operate** surface. Polish preserves the
+AustralianSuper visual world while making the tool disappear into the modelling task:
+one elevation mechanism per panel, no repeated eyebrow labels, no decorative card stripes,
+no nested-card treatment for editor sections, fixed product typography, one obvious
+primary action, and a compact sticky assistant beside the larger model workspace.
+
 This project-local design system was generated with UI/UX Pro Max 2.13.0 and then
 fit-checked against the accepted single-user insurance modelling workflow. The broad
 catalog's marketing hero pattern was rejected because this is an operational workbench,
@@ -44,28 +61,30 @@ typography guidance with the matched Data-Dense Dashboard and Minimalism & Swiss
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `--color-primary` | `#0369A1` | Primary actions, active state, focus relationship |
-| `--color-primary-strong` | `#075985` | Primary hover/pressed state |
+| `--color-primary` | `#7D6690` | Approved muted-purple primary controls |
+| `--color-primary-strong` | `#51336B` | Deep-lavender headings and hover state |
 | `--color-on-primary` | `#FFFFFF` | Text/icons on primary |
-| `--color-accent` | `#15803D` | Successful/safe state only |
-| `--color-background` | `#EEF5F8` | Application background |
+| `--color-accent` | `#FA8C00` | Approved soft-orange decorative and progress accents |
+| `--color-accent-strong` | `#8C2902` | Accessible dark-orange labels and relationships |
+| `--color-background` | `#F0F0F0` | Approved soft-grey application background |
 | `--color-surface` | `#FFFFFF` | Main panels and controls |
-| `--color-surface-subtle` | `#F7FAFC` | Grouping and editor rows |
-| `--color-foreground` | `#132B3A` | Primary text |
-| `--color-muted-foreground` | `#526673` | Secondary text |
-| `--color-border` | `#C8D8E1` | Separators and control boundaries |
-| `--color-warning` | `#9A5B13` | Warning labels and borders |
-| `--color-warning-surface` | `#FFF7E8` | Warning background |
-| `--color-danger` | `#B42318` | Destructive/error state |
-| `--color-ring` | `#0284C7` | Keyboard focus ring |
+| `--color-surface-subtle` | `#F0F0F0` | Grouping and editor rows |
+| `--color-foreground` | `#2E2E2E` | Primary body text |
+| `--color-muted-foreground` | `#606060` | Secondary text |
+| `--color-border` | `#D4CCDA` | Approved pale-lavender separators |
+| `--color-border-strong` | `#A899B5` | Approved lavender selected boundaries |
+| `--color-highlight` | `#D4CCDA` | Approved pale-lavender selection surface |
+| `--color-information` | `#EDE1B5` | Approved cream information/warning surface |
+| `--color-danger-surface` | `#F7B49A` | Approved pastel-coral destructive/error surface |
+| `--color-ring` | `#EA4403` | Orange keyboard focus ring |
 
 Normal text must meet 4.5:1 contrast. Controls, status and relationships must never rely
 on color alone.
 
 ## Typography and spacing
 
-- Prefer IBM Plex Sans when locally available, then `Aptos`, `Segoe UI`, and system
-  sans-serif fallbacks. Do not add a runtime Google Fonts request to this sensitive pilot.
+- Use Arial, matching the AustralianSuper theme's major and minor font. Fall back to
+  `Helvetica Neue` and a generic sans-serif without adding a runtime font request.
 - Use 16px base body text and 1.5 line-height; compact metadata may use 12–13px with strong
   contrast.
 - Use a 4/8px spacing rhythm: 4, 8, 12, 16, 24, 32 and 48px.
@@ -74,7 +93,10 @@ on color alone.
 
 ## Components and interaction
 
-- Controls use 8px corners; grouping panels use 12px corners. Avoid excessive pill shapes.
+- Controls use 8px corners; grouping panels use 12–16px corners. Avoid excessive pill shapes.
+- Use either a border or a shadow to establish a surface, not both. Editor disclosures inside
+  a panel are flat sections separated by rules; only repeated entity rows retain a bounded
+  container because they are individually interactive records.
 - Buttons have a minimum 40px height on desktop and 44px on compact/touch layouts.
 - Every button inherits the application typeface and uses the same 14px size, 700 weight,
   8px radius and focus treatment. Primary, secondary, text and danger variants may change
