@@ -308,7 +308,7 @@ describe('Michal modelling workflow', () => {
     expect(await screen.findByRole('heading', { name: 'Building your model' })).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: 'Model generation progress' })).toBeTruthy();
 
-    expect(await screen.findByText('Receiving live model output…')).toBeTruthy();
+    expect((await screen.findByRole('status')).textContent).toBe('Receiving live model output…');
     expect(screen.getByLabelText('Live provider transcript').textContent).toContain('"Claim Payment"');
     await vi.waitFor(() => expect(pollCount).toBeGreaterThan(0));
     current = { ...current, draft: generatedClaimPayment };
