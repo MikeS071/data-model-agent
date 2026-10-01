@@ -1,8 +1,18 @@
 export const DEFAULT_PROVIDER_BASE_URL = 'https://api.openai.com/v1';
+export type ProviderType = 'openai' | 'copilot-sdk' | 'vscode-agent-host';
 
 export interface ProviderSettings {
   baseUrl: string;
   model: string;
+}
+
+export interface ProviderSelection extends ProviderSettings {
+  providerType: ProviderType;
+}
+
+export function parseProviderType(value: unknown): ProviderType {
+  if (value === 'openai' || value === 'copilot-sdk' || value === 'vscode-agent-host') return value;
+  throw new Error('provider-settings-invalid');
 }
 
 export function normalizeProviderBaseUrl(value: unknown): string {
@@ -24,4 +34,21 @@ export function parseProviderSettings(value: unknown): ProviderSettings {
   const model = input.model.trim();
   if (!model || model.length > 200) throw new Error('provider-settings-invalid');
   return { baseUrl: normalizeProviderBaseUrl(input.baseUrl), model };
+}
+
+export function parseProviderSelection(value: unknown): ProviderSelection {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('provider-settings-invalid');
+  const input = value as { providerType?: unknown; baseUrl?: unknown; model?: unknown };
+  return { providerType: parseProviderType(input.providerType), ...parseProviderSettings(input) };
+}
+
+export function parseStoredProviderSelection(value: unknown): ProviderSelection {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('provider-settings-invalid');
+  const input = value as { providerType?: unknown; baseUrl?: unknown; model?: unknown };
+  if (typeof input.model !== 'string' || input.model.trim().length > 200) throw new Error('provider-settings-invalid');
+  return {
+    providerType: parseProviderType(input.providerType),
+    baseUrl: normalizeProviderBaseUrl(input.baseUrl),
+    model: input.model.trim(),
+  };
 }

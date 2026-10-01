@@ -1,0 +1,71 @@
+{
+  "name": "data-model-agent-vscode-provider",
+  "displayName": "Data Model Agent Provider",
+  "description": "Bridges the VS Code Language Model API to the local Model Foundry application.",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "mikes071",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.137.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:dataModelAgent.provider.restart",
+    "onCommand:dataModelAgent.provider.showStatus"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "dataModelAgent.provider.restart",
+        "title": "Data Model Agent: Restart VS Code Provider Bridge"
+      },
+      {
+        "command": "dataModelAgent.provider.showStatus",
+        "title": "Data Model Agent: Show VS Code Provider Status"
+      }
+    ],
+    "configuration": {
+      "title": "Data Model Agent Provider",
+      "properties": {
+        "dataModelAgent.provider.model": {
+          "type": "string",
+          "default": "gpt-5.6-sol",
+          "scope": "machine",
+          "description": "Default GitHub Copilot model exposed to the local Model Foundry application."
+        },
+        "dataModelAgent.provider.connectionFile": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Optional machine-local connection-record path. The extension creates it with a random IPC endpoint and local authentication token."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "check": "tsc -p . --noEmit",
+    "check:bridge": "node scripts/check-bridge.cjs",
+    "check:models": "node scripts/check-bridge.cjs models",
+    "check:completion": "node scripts/check-bridge.cjs complete",
+    "dev": "code --extensionDevelopmentPath=. --new-window ../..",
+    "install:local": "pnpm build && node scripts/install-local.cjs",
+    "vscode:prepublish": "pnpm build"
+  },
+  "dependencies": {
+    "@data-model-agent/vscode-provider-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.2",
+    "@types/vscode": "1.137.0",
+    "typescript": "5.9.3"
+  }
+}

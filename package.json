@@ -13,6 +13,7 @@
   "packageManager": "pnpm@10.32.1",
   "scripts": {
     "build": "pnpm --dir apps/web build",
+    "build:vscode-provider": "pnpm --dir apps/vscode-provider build",
     "dev": "pnpm --dir apps/web dev",
     "test": "pnpm --dir apps/web test",
     "test:e2e": "pnpm --dir apps/web test:e2e"
