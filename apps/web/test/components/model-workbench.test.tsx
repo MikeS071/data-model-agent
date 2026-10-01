@@ -310,7 +310,7 @@ describe('Michal modelling workflow', () => {
 
     expect((await screen.findByRole('status')).textContent).toBe('Receiving live model output…');
     expect(screen.getByLabelText('Live provider transcript').textContent).toContain('"Claim Payment"');
-    await vi.waitFor(() => expect(pollCount).toBeGreaterThan(0));
+    await vi.waitFor(() => expect(pollCount).toBeGreaterThan(0), { timeout: 2500 });
     current = { ...current, draft: generatedClaimPayment };
     completePoll!(Response.json(generationJob(project.id, 'completed', { transcript: '{"model":{"name":"Claim Payment"}}' })));
     expect(await screen.findByRole('heading', { name: 'Claim Payment model' }, { timeout: 2500 })).toBeTruthy();
