@@ -1,7 +1,7 @@
 ---
 kind: request
 version: 1
-revision: 2
+revision: 3
 status: accepted
 slug: data-model-agent
 ---
@@ -13,7 +13,8 @@ slug: data-model-agent
 Give Michal a resilient, AustralianSuper-branded single-user Next.js workspace for
 developing, reviewing, revising, saving and exporting insurance data models from
 requirements and existing technical artifacts. Generation must remain observable and
-recoverable during long model-provider calls.
+recoverable during long model-provider calls. CSV data extracts can inform model
+structure without sending the complete extract or likely personal data to the provider.
 
 ## Intent source
 
@@ -22,7 +23,9 @@ Direct user guided intake.
 ## Boundaries
 
 - Pilot for a large insurance organisation.
-- Accept free-form requirements, existing schemas, DDL and Markdown.
+- Accept free-form requirements, existing schemas, DDL, Markdown and CSV data extracts.
+- Preserve an attached CSV locally, derive a reviewable provider-safe representation, and
+  use only that confirmed representation during generation and chat.
 - Let each project select an available server-side provider and model, including the
   signed-in VS Code GitHub Copilot language-model service without extracting credentials.
 - Persist and retrieve models and generate Mermaid ER and draw.io XML.
@@ -35,6 +38,9 @@ Direct user guided intake.
 - The pilot has one user and requires no authentication.
 - Inputs may contain sensitive organisational information and may be stored and retrieved.
 - The local VS Code extension host is already authenticated to GitHub Copilot by the user.
+- CSV input uses text-based comma-separated files; spreadsheet workbooks are not CSV.
+- A CSV may not have an obvious header row, so the application may infer candidate
+  headers but the user confirms or corrects them before provider use.
 - Automated tests use fake providers; a bounded live local bridge check is sufficient to
   prove the signed-in VS Code provider path.
 
@@ -45,17 +51,62 @@ Direct user guided intake.
 - Reading, exporting or persisting GitHub, Azure or model-provider credentials.
 - Private VS Code Agent Host protocols or model tools.
 - Automatic application of generated models as database migrations.
+- Excel workbooks, multi-sheet imports, TSV files and general-purpose data cleansing.
+- Sending a complete CSV file to a model provider.
 
 ## Acceptance criteria
 
 ### INPUTS
 
 **Outcome:** Michal can create a modelling request from free-form text and attach
-Markdown, DDL or schema text, and the application preserves the supplied source material
-with the saved model.
+Markdown, DDL, schema text or CSV, and the application preserves the supplied source
+material with the saved model.
 
-**Proof:** Run component and service tests using literal text, Markdown, DDL and schema
-fixtures, then inspect the saved and reloaded request.
+**Proof:** Run component and service tests using literal text, Markdown, DDL, schema and
+CSV fixtures, then inspect the saved and reloaded request.
+
+### CSV-IMPORT-REVIEW
+
+**Outcome:** Attaching a CSV produces a review step showing the inferred header, column
+profile and masked sample. The user can confirm or correct the inferred header before the
+CSV becomes eligible for generation. Editing the original CSV invalidates that
+confirmation, recomputes the analysis and requires confirmation again.
+
+**Proof:** Exercise header-present, ambiguous-header and headerless fixtures; assert the
+preview, correction and confirmation states; edit a confirmed CSV and prove generation
+remains blocked until the recomputed analysis is confirmed.
+
+### CSV-PROVIDER-CONTEXT
+
+**Outcome:** Generation and chat receive CSV headers, inferred column profiles and a
+deterministic distributed sample of at most 100 rows. Likely identifiers and personal
+data are masked in sampled values while type and format evidence remains available. The
+complete raw CSV is never included in a provider request.
+
+**Proof:** Use a large fixture containing names, email addresses, phone numbers, account
+identifiers and ordinary business values; inspect the exact fake-provider request for
+stable distributed sampling, useful profiles, masked sensitive values and absence of raw
+file content or unsampled sentinel values.
+
+### CSV-VALIDATION
+
+**Outcome:** Malformed, binary, unsupported-encoding, inconsistent-width or oversized CSV
+input fails before provider access with a specific correction message. A valid CSV
+supports quoted fields, embedded commas, escaped quotes, embedded line breaks and an
+optional UTF-8 byte-order mark.
+
+**Proof:** Run parser and boundary tests covering each valid quoting case and each typed
+failure, then assert the fake provider was not called for rejected input.
+
+### CSV-RETRIEVE-REGENERATE
+
+**Outcome:** Reopening a project restores the original CSV, its confirmed analysis state
+and the provider-safe preview. Regeneration snapshots the latest confirmed analysis so a
+retry or reload cannot silently use an older CSV interpretation.
+
+**Proof:** Save, reload and regenerate a project with a confirmed CSV; compare the stored
+source, restored review state and durable generation-job snapshot with literal expected
+values.
 
 ### CANONICAL-MODEL
 
@@ -178,7 +229,7 @@ build and UI checks introduced by the implementation.
 
 ## Approval
 
-Status: accepted. Michal explicitly accepted request revision 1 during the guided pilot
-intake. On 2026-10-01, Michal authorized the complete resilience, provider, input-editing,
-branding and model-workbench delivery sequence and clarified that Copy and Export PDF
-must always use the Mermaid diagram. That direct decision accepts request revision 2.
+Status: accepted. On 2026-10-01, Michal accepted revision 3 after selecting confirmed
+header inference, deterministic distributed sampling of at most 100 rows, provider-safe
+column profiling, automatic masking of likely identifiers and personal data, and
+confirmation invalidation after edits.
