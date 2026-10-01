@@ -1,4 +1,4 @@
-# Personal Auto Insurance Policy Management
+# Personal Auto Insurance Requirements
 
 Create a data model for a simple personal auto insurance system.
 
