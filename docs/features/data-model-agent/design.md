@@ -1,10 +1,10 @@
 ---
 kind: design
 version: 1
-revision: 12
+revision: 14
 status: accepted
 slug: data-model-agent
-requestRevision: 2
+requestRevision: 3
 ---
 
 # Data-modelling agent design
@@ -14,11 +14,12 @@ requestRevision: 2
 Michal needs a single-user pilot for developing insurance data models from free-form
 requirements and text-based technical artifacts. The application must turn uncertain
 inputs into an explicit draft, preserve and edit the supplied sources, provide structured
-editing, and keep Mermaid and draw.io outputs semantically aligned. The pilot may handle
-sensitive organisational information, sends supplied content only to the provider
-selected for the project when generation or chat is requested, and persists its state
-locally. Long provider calls must remain observable and recoverable. It is not a
-production, multi-user or deployed service.
+editing, and keep Mermaid and draw.io outputs semantically aligned. CSV data extracts may
+contain useful structural evidence and sensitive row values. The application must retain
+the original locally while sending only a confirmed, masked and bounded representation to
+the selected provider. The pilot may handle sensitive organisational information and
+persists its state locally. Long provider calls must remain observable and recoverable.
+It is not a production, multi-user or deployed service.
 
 ## Chosen approach
 
@@ -27,15 +28,74 @@ Keep browser components concerned with intake, structured model editing and prev
 route handlers call application services through server-only boundaries.
 
 The domain layer owns a validated canonical model. An input normalizer treats prose,
-Markdown, DDL, SQL, JSON and schema files as inert text and creates a bounded generation
-context. A replaceable model-provider interface selects an OpenAI Responses API adapter,
-GitHub Copilot SDK adapter or VS Code language-model bridge adapter; deterministic fakes
-remain available in tests. The provider is asked for structured JSON and the application
+Markdown, DDL, SQL, JSON and schema files as inert text. CSV follows a separate
+server-authoritative analysis boundary before it can enter a generation context. A
+replaceable model-provider interface selects an OpenAI Responses API adapter, GitHub
+Copilot SDK adapter or VS Code language-model bridge adapter; deterministic fakes remain
+available in tests. The provider is asked for structured JSON and the application
 validates the complete response again before it can become a working draft.
 `OPENAI_API_KEY` remains a server environment secret. The Settings view chooses a global
 default provider and model. Each project stores its own non-secret provider/model
 selection, initialized from that default, so existing projects do not silently change
 destination when the global default changes.
+
+Add `csv` to `SourceKind`, but keep the original CSV content local and distinct from its
+provider-safe analysis. A server-only CSV analyser uses the maintained `csv-parse`
+library in strict record-width mode. It accepts UTF-8 with an optional byte-order mark,
+RFC-style quoted fields, escaped quotes, embedded commas and embedded line breaks.
+Existing 1 MB per-file and 5 MB aggregate source limits still apply; additional row and
+column ceilings bound parser work before profiling.
+
+Attaching or editing a CSV calls an analysis route that persists only masking-session
+state and shows a review card in the
+requirements/source panel. The analyser proposes whether the first record is a header and
+returns editable column names, row/column counts, inferred types, nullability and format
+evidence. The user confirms or corrects the header interpretation. Confirmation binds the
+canonical analysis to a SHA-256 digest of normalized source content plus an analysis
+version. Any content or header change invalidates confirmation and blocks generation and
+chat until server analysis is recomputed and confirmed.
+
+CSV analysis also needs a stable masking scope before a project exists. When the first CSV
+is attached to an unsaved intake, the server creates an expiring `CsvIntakeSession` with a
+random opaque ID and server-only masking key; it stores no raw CSV. Subsequent analysis
+requests present that ID and receive samples masked with the same key. Project creation
+atomically transfers the key and key generation into the new project, recomputes each CSV
+from submitted content and persists the confirmed analyses. Existing projects analyse
+against their project key directly. This guarantees that the preview pseudonyms are
+identical to saved and provider pseudonyms without using a global key or exposing key
+material. Abandoned intake sessions expire after 24 hours and are deleted opportunistically.
+
+The analyser parses the complete bounded file locally but emits at most 100 sampled data
+rows. Sampling is deterministic and distributed across the complete row range using
+evenly spaced indexes, with duplicate indexes removed for small files. Profiles use the
+complete parsed file for type candidates, null ratio, length bounds, uniqueness ratio and
+recognized formats, but do not expose raw string extrema or value lists.
+
+Sensitivity classification combines normalized header-name rules with value-pattern
+detectors for personal names, email, phone, address, birth date, government/member/
+account identifiers, payment-card-like values and other high-risk identifiers. The user
+may mark additional columns sensitive but cannot unmask an automatically high-confidence
+sensitive column in this pilot. Sampled sensitive values become stable project-scoped
+pseudonyms generated by HMAC with a server-only random project masking key. Matching
+values therefore remain linkable across that project's CSV files without revealing raw
+values. Tokens expose only a category and opaque identifier; type and format evidence is
+carried separately.
+
+Project creation/update recomputes or verifies every submitted CSV analysis on the server
+before committing source and confirmation state. Durable generation jobs snapshot the
+confirmed provider-safe CSV context, its content digest and analysis version, never the
+raw CSV. Chat uses the same confirmed context builder. Textual source kinds retain their
+current bounded normalized content behavior.
+
+Reloading while a queued/running job exists resumes observation of that immutable job.
+The Retry action for a failed/interrupted job does not replay its old request JSON: it
+first runs the same preflight as Generate/Regenerate—persist the current draft,
+requirements, sources, provider and model; recompute/validate CSV confirmation; then
+atomically create a new job from those current inputs and record `retry_of_job_id` for
+audit. If a CSV has changed or become unconfirmed, Retry is disabled until review is
+complete and is labelled `Retry with current inputs`. Other unsaved valid edits are
+flushed before job creation. Historical job snapshots remain readable evidence but cannot
+be applied as new work.
 
 The VS Code adapter uses a companion extension and only the public `vscode.lm` API. The
 extension writes a user-local connection record containing a random named-pipe address
@@ -155,6 +215,13 @@ it would expose credentials and weaken input control. A hosted database was reje
 unnecessary for a local single-user pilot. Overwriting saved models was rejected because
 it destroys review history. A raw JSON editor and an embedded draw.io editor were rejected
 because structured domain editing gives one source of truth with a smaller pilot surface.
+Sending complete CSV files to the provider was rejected because row-level data is
+unnecessary for most structural inference and materially increases privacy and token
+exposure. Browser-authoritative parsing was rejected because API callers could bypass it
+and a saved confirmation could diverge from the server's generation input. Headers-only
+context was rejected because bounded values and profiles improve type, format, optionality
+and relationship inference. Random per-file masking was rejected because it destroys
+useful equality evidence across related extracts.
 
 ## Component diagram
 
@@ -162,6 +229,8 @@ because structured domain editing gives one source of truth with a smaller pilot
 flowchart LR
   Michal[Michal] --> UI[Next.js browser UI]
   UI --> Routes[Server route handlers]
+  Routes --> CSV[Server CSV analyser and masker]
+  CSV --> Repo
   Routes --> Service[Application services]
   Routes --> Jobs[Durable generation-job manager]
   Jobs --> Service
@@ -187,16 +256,26 @@ sequenceDiagram
   actor Michal
   participant UI as Browser UI
   participant App as Next.js server
+  participant CSV as CSV analyser
   participant Job as Durable generation job
   participant AI as Project-selected provider
   participant Domain as Domain validator
   participant DB as SQLite repository
-  Michal->>UI: Edit requirements, sources, provider and model
+  Michal->>UI: Attach CSV and edit requirements/sources
+  UI->>App: Analyse CSV bytes
+  App->>DB: Create/reuse expiring intake masking session
+  App->>CSV: Parse, infer headers, profile, sample and mask
+  CSV-->>UI: Reviewable candidate analysis
+  Michal->>UI: Confirm or correct inferred headers
+  UI->>App: Save source and confirmation
+  App->>CSV: Recompute with intake/project key and verify digest
+  CSV->>DB: Transfer key; persist source and confirmed analysis
+  Michal->>UI: Select provider/model and start generation
   UI->>App: Save inputs and start generation
-  App->>DB: Persist inputs and immutable job snapshot
+  App->>DB: Persist provider-safe immutable job snapshot
   App-->>UI: 202 Accepted with job ID
   App->>Job: Run queued job
-  Job->>AI: Normalized snapshot and canonical JSON schema
+  Job->>AI: Requirements, safe source contexts and JSON schema
   AI-->>Job: Progress and structured-output fragments
   Job->>DB: Heartbeat, phase and bounded transcript
   UI->>App: Poll job after reload or navigation
@@ -228,6 +307,23 @@ original name, accepted text type, content and content length. A working draft r
 the current canonical model, assumptions, warnings, clarification queue and generation
 metadata. A version snapshots those values plus Mermaid and draw.io output.
 
+A CSV `SourceArtifact` owns at most one `CsvAnalysis`. The analysis records the normalized
+content digest, analysis version, inferred and confirmed header modes, confirmed column
+names, row/column counts, column profiles, masked distributed sample, confirmation state
+and timestamp plus the masking-key generation ID. A `CsvColumnProfile` records ordinal,
+confirmed name, type candidates, null/unique ratios, length bounds, recognized formats
+and sensitivity categories without raw value extrema. A `CsvSampleRow` records the
+original zero-based data-row index and provider-safe cell values. Confirmation is valid
+only while source digest, header choices, analysis version and masking-key generation
+match.
+
+Each project owns a random masking key and non-secret generation ID created on the server.
+The key never enters browser DTOs, logs, job snapshots or provider requests. It exists
+only to create stable project-scoped pseudonyms; deleting the project deletes the key and
+prevents future cross-file linkage. A `CsvIntakeSession` provides the same key/generation
+before project creation, expires after 24 hours, stores no source content and can be
+consumed exactly once by project creation.
+
 `CanonicalModel` contains stable model, entity, attribute, relationship and rule IDs.
 Entities contain names, business definitions, layout positions and attributes. Attributes
 contain data type, optionality, primary-key and foreign-key metadata and business
@@ -251,6 +347,25 @@ validated JSON or text;
 timestamps and version numbers are ordinary indexed columns. Foreign keys enforce project
 ownership, and `(project_id, version_number)` is unique.
 
+An additive migration creates `csv_intake_sessions`, `project_csv_masking_keys` keyed by
+project and `csv_source_analyses` keyed by source artifact. Intake sessions store opaque
+ID, key bytes, generation ID and expiry only. Project masking keys store key bytes,
+generation ID and timestamps as restricted local data. CSV analysis stores source digest,
+analysis version, masking generation, confirmation fields, profiles and masked sample as
+validated columns/JSON. It cascades with the source and project. Source replacement and
+analysis confirmation commit in one transaction so a confirmation cannot point at older
+content.
+
+Creating a project from an intake session uses `BEGIN IMMEDIATE`: validate session/expiry,
+insert the project, transfer key bytes and generation ID, recompute and insert sources/
+analyses, then delete the session. Rotation creates a new key and generation ID and marks
+all project CSV analyses unconfirmed in the same transaction. A missing key is a typed
+blocking state when CSV analysis state already exists; it never causes silent key
+regeneration while confirmations exist. For a migrated/existing project with no masking
+key and no CSV analysis rows, attaching its first CSV transactionally creates the initial
+project key/generation before analysis. This one-time lazy initialization is distinct
+from recovery after key loss.
+
 Autosave upserts the single working draft in one transaction without creating history.
 Save Version reads the working draft, validates it, renders both formats and inserts one
 immutable version plus its source snapshot in one transaction. Reopening an old version
@@ -271,14 +386,29 @@ phase, message, bounded transcript, typed error and lifecycle timestamps includi
 latest heartbeat. Creating a job is rejected while that project has queued or running
 work. Completion validates and saves the draft before marking the job complete.
 Cancellation and interruption never apply partial transcript output to the canonical
-model.
+model. Job request JSON stores prebuilt provider-safe source contexts; CSV entries contain
+only digest/version/key generation, confirmed columns, profiles and masked sample.
+Resuming an existing active job therefore observes its exact reviewed snapshot without
+reading newer sources. A new retry job is linked through nullable `retry_of_job_id` but
+snapshots the current confirmed contexts; it never replays the older job request or
+persists raw CSV in either job row.
 
 ## External boundaries
 
-Accept manually entered text plus `.md`, `.txt`, `.sql`, `.ddl` and `.json` files. Treat
-every upload as inert UTF-8 text, enforce per-file and aggregate size limits, normalize
+Accept manually entered text plus `.md`, `.txt`, `.sql`, `.ddl`, `.json` and `.csv` files.
+Treat every upload as inert data, enforce per-file and aggregate size limits, normalize
 line endings, and reject binaries or malformed encodings. Never execute supplied DDL,
-HTML or scripts.
+HTML, scripts or spreadsheet formulas.
+
+The browser sends CSV bytes to `POST /api/csv-analysis` as multipart data rather than
+decoding them with `File.text()`. The server performs fatal UTF-8 decoding, strips an
+optional BOM, parses with explicit comma delimiter and strict column counts, applies row/
+column ceilings, profiles and masks, and returns a bounded review DTO. The route stores
+no CSV content or analysis; before project creation it persists only the expiring intake
+session key/generation record. Project create/update accepts the original normalized CSV,
+intake-session ID when applicable, and a confirmation claim; it recomputes the canonical
+analysis and rejects mismatched digest, analysis version, key generation or header
+choices. This makes preview and persistence use one authority.
 
 Clicking Generate first persists the editable intake and creates a job from that exact
 snapshot. The job invokes the selected server-only adapter with a JSON Schema
@@ -301,6 +431,8 @@ clarification, a bounded recent chat history and the new message. When the messa
 that clarification, the complete result must apply the answer to the model and advance or
 clear the clarification queue. A chat response must contain a non-empty assistant reply
 and a complete generation result; partial patches are not applied to the canonical model.
+The context builder formats confirmed CSV input as explicit metadata, columns, profiles
+and numbered masked sample rows. It never passes raw CSV content to a provider adapter.
 
 SQLite is reachable only through the repository interface. Renderers are pure functions
 over a validated canonical model. Download endpoints derive safe filenames, set explicit content types and return only the
@@ -316,6 +448,17 @@ API keys remain server environment variables. GitHub/Azure credentials remain ow
 VS Code. Neither is persisted, serialized into page props or included in browser bundles.
 Non-secret provider/model selections are visible and editable; changing them affects only
 the next provider request and never migrates or retransmits stored model data by itself.
+
+Raw CSV remains sensitive local source material subject to the same filesystem and backup
+controls as requirements. It is never written to logs, transcripts, provider diagnostics
+or generation-job snapshots. The server-only project masking key must not be serialized,
+returned from APIs or exported with model versions. Analyses and confirmations bind to
+the non-secret key generation ID; rotation or missing key material transactionally
+invalidates all project CSV confirmations before any new context can be built. HMAC tokens
+are scoped to one project, so equality is visible only within that project's provider
+context and tokens cannot be correlated across projects. The review UI displays exactly
+the masked sample and profiles that generation will use, plus sensitivity labels and a
+control to mark more columns sensitive.
 
 Logs contain request IDs, durations and typed error categories, not source content,
 prompts, provider responses or secrets. Provider diagnostics record the configured model
@@ -348,6 +491,23 @@ on failure; the submitted text is restored to the composer when that does not ov
 newer draft message. Mermaid render failure keeps Copy and Export PDF disabled. Clipboard
 or PDF creation failure reports a typed retryable error and does not affect the model.
 
+CSV failures are typed and source-specific: invalid UTF-8, malformed quoting, inconsistent
+column count, row/column limit, empty file and unusable header inference keep the CSV in an
+unconfirmed state and make no provider call. Ambiguous headers show the inferred mode and
+editable candidates rather than silently choosing. Editing content or header choices
+invalidates confirmation immediately. A parser/analysis version change marks older
+confirmations as requiring reanalysis; it never silently rebuilds provider context during
+generation. If server recomputation differs from submitted confirmation, project save or
+job creation fails with `csv-confirmation-stale` and preserves the prior saved state.
+An expired/consumed intake session returns `csv-intake-session-expired` and requires a new
+analysis; no raw content was stored in the session. Missing or rotated masking-key
+generation with existing CSV analysis state returns `csv-masking-key-invalid`,
+transactionally invalidates project CSV confirmations and requires recovery/reanalysis.
+No key plus no CSV analysis state triggers one-time transactional initialization for a
+project's first CSV. Retry remains disabled while any current CSV is unconfirmed, flushes
+all other valid current edits through the normal generation preflight, and leaves the
+older job snapshot audit-only.
+
 Malformed or schema-invalid model output is never stored as a canonical model; validation
 details become a bounded error and may drive a new generation attempt. Domain ambiguity
 produces a visible draft and one clarification question at a time inside the chat
@@ -362,7 +522,16 @@ human reacceptance.
 Domain unit tests compare the canonical Claim-Payment fixture with literal expected
 entities, attributes, keys, optionality, cardinality, definitions, layout and aggregate
 rules. Input tests cover prose, Markdown, DDL, SQL, JSON, encoding, size limits and the
-rule that DDL is never executed. Provider contract tests use fake adapters for generation and chat success, ambiguity,
+rule that DDL is never executed. CSV parser tests cover BOM, quoting, embedded delimiters/
+newlines, escaped quotes, malformed input, strict widths, encoding and resource limits.
+Profiling tests use literal fixtures for type/format/null/uniqueness inference, stable
+distributed indexes at row counts below/equal/above 100, sensitivity classification,
+project-scoped pseudonym equality and cross-project unlinkability. A fixture larger than
+100 rows places type, format, null, uniqueness and length sentinels only in deliberately
+unsampled rows; assertions prove those sentinels affect full-file profiles while their raw
+values remain absent from the sample, job JSON and exact provider request.
+
+Provider contract tests use fake adapters for generation and chat success, ambiguity,
 invalid structure, timeout, incomplete output, safe diagnostics, project provider/model
 selection and missing or invalid configuration. VS Code protocol tests cover
 authentication, framing, progress, transcript and bounded payloads; a client-bundle check
@@ -371,7 +540,19 @@ guards against credential leakage.
 Repository integration tests use a temporary SQLite database to prove source retention,
 pre-generation update and delete, project-provider isolation, job snapshots, heartbeat,
 restart/stale interruption, cancellation, atomic completion, chat-turn persistence,
-autosave, transactional immutable versions, list, reopen and continue-from-version.
+autosave, transactional immutable versions, list, reopen and continue-from-version. CSV
+repository tests prove transactional source/analysis replacement, digest-bound
+confirmation, masking-key secrecy/cascade, reload, stale confirmation rejection and raw
+CSV absence from generation-job JSON. Intake-session tests prove preview tokens equal
+persisted/provider tokens after atomic key transfer, expiry stores no raw content, and a
+session cannot be consumed twice. Key-generation tests prove reload stability,
+transactional rotation/loss invalidation, required reconfirmation and exclusion of key
+bytes from APIs, versions, jobs and logs. A populated migrated project with no key or CSV
+state can transactionally create its first key when attaching its first CSV, while missing
+key material with existing analysis is rejected as loss. Retry tests distinguish
+active-job resume from a new `retry_of_job_id` job and prove the latter persists unsaved
+requirements, non-CSV source, provider/model and canonical-draft edits before snapshotting
+current confirmed CSV contexts.
 Renderer tests parse Mermaid semantics and draw.io XML and compare both with the same
 canonical fixture. Component tests exercise structured editing, read-only diagnostic
 views, settings, collapsible navigation, chat wrapping and the accessible zoom controls.
@@ -382,21 +563,42 @@ Mermaid PNG and Export PDF starts with `%PDF` and contains the diagram and all t
 model sections. Desktop and 375px checks cover toolbar scrolling, disclosure defaults,
 floating chat placement and horizontal overflow. The configured project unit and
 production build commands run on the exact candidate. Final verification maps independent
-evidence to every request criterion and the complete intent.
+evidence to every request criterion and the complete intent. Browser coverage attaches
+header-present and headerless CSV files, reviews/corrects/confirms headers, verifies the
+masked preview, blocks generation after an edit, reconfirms, reloads and inspects the
+exact fake-provider context.
+The browser retry flow modifies valid non-CSV inputs after a failed job and proves those
+edits are saved before the linked replacement job; editing a CSV separately proves Retry
+is unavailable until the new analysis is confirmed.
+Migration tests start from a populated schema-v7 fixture containing projects, text
+sources, drafts, versions and active/terminal jobs, migrate to v8, and prove every
+pre-existing row remains unchanged while new foreign keys, unique constraints, cascades,
+session transfer and key-generation invalidation work. A schema version above the
+supported maximum is rejected before any migration or application write.
 
 ## Rollout and rollback
 
 The pilot runs locally with a documented environment example and an empty SQLite database.
-On first start, the application applies reviewed versioned migrations and refuses to run
-against an unknown newer schema. Seed data is test-only; Michal creates the first real
-project through the UI.
+Before applying the CSV migration, the CSV-capable repository reads the maximum schema
+version without creating or updating objects and refuses a version newer than it supports.
+It then applies reviewed migrations transactionally. Seed data is test-only; Michal
+creates the first real project through the UI.
 
-Before an incompatible migration, copy the SQLite file while the application is stopped
-and verify that the copy opens. Prefer additive migrations during the pilot. Application
-rollback may reuse the database only when its declared schema range includes the current
-version; otherwise restore the matching backup. Disabling or removing OpenAI configuration
-must leave saved versions readable. Deployment and production data migration remain out
-of scope.
+Before the v7-to-v8 migration, stop the application, copy the SQLite database and verify
+that the backup opens. Rolling back to any pre-CSV binary always restores that v7 backup;
+the v8 database must not be opened for writes by an older binary because that binary
+cannot be retroactively given the schema guard. The new guard protects future rollbacks
+only when both versions declare compatible schema ranges. Disabling or removing provider
+configuration must leave saved versions readable. Deployment and production data
+migration remain out of scope.
+
+The CSV migration is additive. Existing source artifacts and projects need no backfill.
+After deployment, only newly attached `.csv` sources have analyses. Existing projects
+lazily create their initial key/generation transactionally on first CSV attachment only
+when no CSV analysis state exists. Rotation creates a new key generation and invalidates
+every CSV confirmation transactionally. Missing key material when analysis state exists
+blocks CSV context construction and requires explicit key recovery or rotation followed
+by reanalysis/reconfirmation.
 
 ## Design decisions
 
@@ -408,9 +610,9 @@ of scope.
 | D-004 | Autosave one mutable draft and create immutable versions explicitly. | It combines editing safety with auditable history. | Autosave every edit as a version or overwrite history. | Draft and version lifecycle must be distinct. |
 | D-005 | Make structured forms the primary editor and canonical JSON read-only. | Domain editing is safer than free-form JSON manipulation. | Editable JSON. | New domain fields require corresponding controls. |
 | D-006 | Provide read-only Mermaid and draw.io previews. | The canonical editor remains the single editing surface. | Embed a draw.io editor. | External draw.io edits must be reintroduced manually. |
-| D-007 | Send normalized source material on Generate without another confirmation gate. | This matches the accepted single-user workflow. | Add a pre-send review screen. | The UI must clearly disclose external transmission. |
+| D-007 | Send normalized non-CSV source material on Generate without another confirmation gate; CSV follows D-033. | This matches the accepted single-user workflow while preserving the CSV privacy boundary. | Add a pre-send review screen for every source. | The UI clearly discloses external transmission and blocks unconfirmed CSV input. |
 | D-008 | Require structured provider output and validate it locally. | Provider formatting alone is not a trust boundary. | Accept prose or unchecked JSON. | Invalid responses fail closed and may require retry. |
-| D-009 | Treat all uploaded artifacts as inert bounded UTF-8 text. | It supports the requested inputs without executing untrusted content. | Execute or deeply parse arbitrary DDL. | Initial semantic extraction depends on the model and validation. |
+| D-009 | Treat all uploaded artifacts as inert bounded UTF-8 data, with CSV parsed only for D-032 analysis. | It supports the requested inputs without executing untrusted content. | Execute arbitrary DDL/formulas or deeply parse every format. | Non-CSV semantic extraction depends on the model; CSV analysis remains deterministic and local. |
 | D-010 | Bind the unauthenticated pilot locally and make no shared-service claim. | Single-user scope does not justify an authorization system. | Add authentication now. | Network deployment requires a new accepted design. |
 | D-011 | Use the environment model as the initial server-side default. | Model choice starts configurable without being embedded in source. | Hard-code a model. | A saved D-019 setting supersedes the default, and missing effective configuration is reported clearly. |
 | D-012 | Store generated representations with each immutable version. | Reopened versions retain the exact reviewed outputs. | Regenerate every historical view. | Version storage is larger but deterministic review is simpler. |
@@ -432,10 +634,31 @@ of scope.
 | D-028 | Apply the supplied AustralianSuper wordmark, Arial typography and approved palette through restrained pastel design tokens. | The pilot must comply with the supplied fund-wide brand while remaining calm for dense modelling work. | Use the former generic blue theme; introduce unapproved high-contrast colors. | The exact deck asset and palette remain the source of truth and responsive/accessibility checks constrain decorative treatment. |
 | D-029 | Consolidate representation actions into one toolbar, float chat at the lower-left, and collapse secondary review groups initially. | The diagram needs maximum vertical space while assistance and review details remain available without dominating the workbench. | Keep scattered actions and permanent side-by-side chat; leave all review cards expanded. | The toolbar scrolls instead of wrapping on narrow screens, chat opens above its fixed bubble, and native disclosures preserve keyboard access. |
 | D-030 | Always rasterize Copy and PDF from a dedicated Mermaid SVG rendered with native SVG text. | Users expect the exported visual to match Mermaid even when draw.io is selected, and Mermaid's XHTML labels taint browser canvases. | Export the selected tab; use the draw.io-layout surrogate; retain `foreignObject` labels. | The export source is representation-independent, safe to rasterize, and PDF adds complete paginated model details. |
+| D-031 | Add CSV as a source kind while preserving the normalized original only in local source storage. | Audit/review needs the original extract, but provider access needs a stricter representation. | Store only a generated summary; send the complete CSV like text. | CSV source and provider-safe analysis have separate lifecycles and DTO rules. |
+| D-032 | Make `csv-parse` on the server the only authoritative CSV parser/profiler. | Correct quoting and one trust boundary are safer than duplicated browser/server interpretation. | Custom parser; browser-only parser; duplicate parsers. | Preview requires a server call and project save recomputes the analysis before persistence. |
+| D-033 | Require explicit confirmation of inferred/corrected headers bound to source digest and analysis version. | Headerless and ambiguous extracts must not be interpreted silently. | Always use the first row; always generate column names; infer without review. | Editing content/header choices or changing analysis version invalidates confirmation and blocks provider use. |
+| D-034 | Select at most 100 deterministic evenly distributed sample rows from the complete parsed data range. | It provides representative evidence with stable tests and bounded provider cost. | First rows only; random sampling; full file. | The same confirmed content produces the same indexes, and row indexes remain visible in review/provider context. |
+| D-035 | Profile the complete bounded CSV without emitting raw value lists or string extrema. | Types, nullability, formats and uniqueness help modelling without unnecessary disclosure. | Profile only sampled rows; include frequent/raw values. | Provider context is more useful than headers alone but deliberately omits high-risk statistics. |
+| D-036 | Automatically classify sensitive columns and replace sampled values with stable project-scoped HMAC pseudonyms. | Masking protects row data while preserved equality supports relationship inference across a project's CSVs. | Unmasked samples; per-file tokens; complete redaction. | A server-only project key is persisted locally, high-confidence masking cannot be disabled, and cross-project correlation is prevented. |
+| D-037 | Build and persist provider-safe source contexts before generation/chat and snapshot them in durable jobs. | Provider adapters and retries must never receive or recover raw CSV accidentally. | Let each provider format raw sources; rebuild context during retry. | Jobs are reproducible and auditable, while raw CSV stays only in project source storage. |
+| D-038 | Add intake-session, digest/versioned CSV-analysis and project masking-key tables through an additive migration. | Pre-project review, confirmation, reload and masking identity must survive process restarts transactionally. | Store keys/analysis in browser state; embed all fields in source rows. | Existing projects need no backfill; sessions expire and key/analysis version changes require reconfirmation. |
+| D-039 | Create an expiring server-side intake masking session and atomically transfer its key into the project. | Unsaved-project previews need the same project-scoped pseudonyms later used for persistence and generation. | Global key; ephemeral preview key; auto-create incomplete projects. | Sessions store no CSV, expire after 24 hours, are single-use and require transactional project creation. |
+| D-040 | Distinguish active-job resume from Retry, which runs normal current-input persistence/validation and creates a linked new job. | Replaying an old CSV interpretation or omitting unsaved edits would conflict with current UI semantics. | Replay prior request JSON; use only saved inputs; silently choose a path. | Retry flushes valid edits, is disabled for unconfirmed CSV, is labelled clearly and stores `retry_of_job_id`; old snapshots remain audit-only. |
+| D-041 | Bind every analysis/confirmation to a masking-key generation, lazily initialize only a project's first key, and invalidate all CSV confirmations on rotation/loss. | Mixing pseudonym namespaces silently destroys cross-file equality, while migrated projects need a defined first-use path. | Backfill every project; bind only source/analysis version; regenerate missing keys silently. | First use is transactional only with no CSV state; rotation is transactional, missing keys with existing state block provider context, and reconfirmation is mandatory. |
+| D-042 | Require a verified v7 backup for rollback, add an unknown-schema guard before v8 writes and test a populated v7-to-v8 migration. | A pre-feature binary cannot be retroactively prevented from writing a newer database. | Claim older binaries can safely reuse v8; omit migration fixtures. | Rollback restores backup, future versions gain compatibility checks, and existing data preservation is proven. |
 
 ## Approval
 
-Status: accepted. Michal explicitly accepted design revision 1 for request revision 1
+Status: accepted. On 2026-10-01, Michal reaccepted design revision 14 for request revision
+3 after implementation-readiness review confirmed that expiring intake masking sessions,
+explicit resume/retry semantics, masking-key-generation binding, migrated-project
+first-key initialization, backup-based v7 rollback, unknown-schema guarding and full-file
+profiling proof close the identified lifecycle and verification gaps.
+
+Historical approvals: On 2026-10-01, Michal accepted design revision 13 for request
+revision 3 with D-031 through D-038. A subsequent implementation-readiness review found
+material lifecycle, retry, key-generation, migration and proof gaps, causing revision 14
+and this renewed design gate. Michal explicitly accepted design revision 1 for request revision 1
 after the guided architecture review, then directly authorized applying the installed
 UI/UX design skill to redesign the pilot workbench. That instruction accepts revision 2's
 visual and interaction decision without changing request intent or acceptance criteria.
