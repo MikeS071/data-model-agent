@@ -1186,7 +1186,6 @@ export function ModelWorkbench() {
               <h2 className="model-representations-title">Model representations</h2>
               <InteractiveModelCanvas key={preview} renderToolbar={controls => <div className="model-toolbar" role="toolbar" aria-label="Model representation controls">
                 <div className="model-toolbar-controls">
-                  <span className="status-dot" aria-live="polite">{status}</span>
                   <div className="segmented" aria-label="Preview format"><button aria-pressed={preview === 'mermaid'} className={preview === 'mermaid' ? 'active' : ''} onClick={() => setPreview('mermaid')}>Mermaid</button><button aria-pressed={preview === 'drawio'} className={preview === 'drawio' ? 'active' : ''} onClick={() => setPreview('drawio')}>draw.io</button></div>
                   <div className="canvas-controls">
                     <button className="canvas-control" type="button" aria-label="Zoom out" onClick={controls.zoomOut}><Icon name="minus" /></button>
@@ -1203,6 +1202,7 @@ export function ModelWorkbench() {
                     <button className="toolbar-button primary" disabled={busy} onClick={() => void saveVersion()}>Save version</button>
                     <button className="toolbar-button destructive" aria-label="Delete model" disabled={busy} onClick={() => void removeProject()}>Delete</button>
                   </div>
+                  <span className="status-dot" aria-live="polite">{status}</span>
                 </div>
               </div>}>
                 {preview === 'mermaid' ? <MermaidPreview source={mermaid} /> : <DiagramPreview model={project.draft.model} />}
