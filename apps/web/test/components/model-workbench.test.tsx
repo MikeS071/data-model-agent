@@ -134,12 +134,15 @@ describe('Michal modelling workflow', () => {
     expect(history?.open).toBe(false);
 
     const liveOutput = screen.getByRole('region', { name: 'Live model output' });
+    const toolbarControls = screen.getByRole('toolbar', { name: 'Model representation controls' })
+      .querySelector('.model-toolbar-controls');
     const chat = screen.getByRole('region', { name: 'Model chat' });
     const editor = screen.getByRole('region', { name: 'Structured model editor' });
     const review = screen.getByRole('region', { name: 'Assumptions and warnings' });
     expect(liveOutput.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chat.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(editor.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(toolbarControls?.lastElementChild?.classList.contains('status-dot')).toBe(true);
     expect(screen.getByRole('group', { name: 'Interactive model canvas' })).toBeTruthy();
     expect(screen.getByText('50%')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Zoom in' }));

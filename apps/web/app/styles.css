@@ -300,7 +300,7 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
 .model-toolbar-controls { align-items: center; display: flex; flex-wrap: nowrap; gap: 6px; justify-content: flex-start; max-width: 100%; min-width: 0; overflow-x: auto; padding-bottom: 3px; scrollbar-width: thin; width: 100%; }
 .model-toolbar-controls > * { flex: 0 0 auto; }
 .model-toolbar .status-dot, .model-toolbar .segmented, .model-toolbar .canvas-controls, .model-toolbar .toolbar-group { box-sizing: border-box; height: var(--toolbar-group-height); min-height: var(--toolbar-group-height); }
-.model-toolbar .status-dot { align-items: center; display: inline-flex; padding-bottom: 0; padding-top: 0; }
+.model-toolbar .status-dot { align-items: center; display: inline-flex; margin-left: auto; padding-bottom: 0; padding-top: 0; }
 .toolbar-group { align-items: center; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 9px; display: flex; gap: 3px; padding: 3px; }
 .toolbar-button { align-items: center; background: white; border: 1px solid transparent; border-radius: 6px; color: var(--primary-strong); cursor: pointer; display: inline-flex; font-size: .75rem; font-weight: 700; gap: 6px; height: var(--toolbar-control-height); justify-content: center; min-height: var(--toolbar-control-height); padding: 0 9px; }
 .toolbar-button:hover:not(:disabled) { background: var(--primary-soft); border-color: var(--border-strong); }
