@@ -1,7 +1,7 @@
 ---
 kind: request
 version: 1
-revision: 4
+revision: 5
 status: accepted
 slug: data-model-agent
 ---
@@ -44,6 +44,8 @@ Direct user guided intake.
   headers but the user confirms or corrects them before provider use.
 - CSV samples are unmasked by default. The user is responsible for marking sensitive
   columns before confirming provider use.
+- Text/Markdown/SQL/DDL/JSON inputs remain limited to 1 MB each. CSV inputs support up to
+  10 MB each, and all attachments together support up to 50 MB.
 - Automated tests use fake providers; a bounded live local bridge check is sufficient to
   prove the signed-in VS Code provider path.
 
@@ -98,10 +100,12 @@ user-marked columns and absence of complete raw file content or unsampled sentin
 **Outcome:** Malformed, binary, unsupported-encoding, inconsistent-width or oversized CSV
 input fails before provider access with a specific correction message. A valid CSV
 supports quoted fields, embedded commas, escaped quotes, embedded line breaks and an
-optional UTF-8 byte-order mark.
+optional UTF-8 byte-order mark. Valid CSVs up to 10 MB each and aggregate attachments up
+to 50 MB are accepted while row/column parser limits still apply.
 
 **Proof:** Run parser and boundary tests covering each valid quoting case and each typed
-failure, then assert the fake provider was not called for rejected input.
+failure, exact 10 MB/50 MB boundaries and one-byte-over failures, then assert the fake
+provider was not called for rejected input.
 
 ### CSV-RETRIEVE-REGENERATE
 
@@ -234,6 +238,6 @@ build and UI checks introduced by the implementation.
 
 ## Approval
 
-Status: accepted. On 2026-10-01, Michal accepted revision 4 after automatic sensitivity
-detection proved too broad. CSV samples are unmasked by default; users explicitly mark
-columns for project-scoped pseudonymization and confirm the exact provider-bound sample.
+Status: accepted. On 2026-10-02, Michal accepted revision 5 with CSV capacity of 10 MB per
+file and 50 MB across all attachments, retaining 1 MB per non-CSV file and the existing
+parser-time row and column ceilings.
