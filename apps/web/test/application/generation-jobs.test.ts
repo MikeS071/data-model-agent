@@ -46,6 +46,10 @@ describe('durable generation job manager', () => {
       transcript: '{"model":',
     }));
     expect(service.getProject(project.id)?.draft).toEqual(generatedClaimPayment);
+
+    const retried = manager.start(service, project.id, null, created.id);
+    await vi.waitFor(() => expect(manager.get(retried.id).status).toBe('completed'));
+    expect(manager.get(retried.id).retryOfJobId).toBe(created.id);
     repository.close();
   });
 });

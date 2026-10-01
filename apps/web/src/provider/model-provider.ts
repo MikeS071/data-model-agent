@@ -1,8 +1,8 @@
-import type { CanonicalModel, SourceArtifactInput } from '@/domain/model';
+import type { CanonicalModel, ProviderSourceInput } from '@/domain/model';
 
 export interface GenerationRequest {
   requirements: string;
-  sources: SourceArtifactInput[];
+  sources: ProviderSourceInput[];
   currentModel: CanonicalModel | null;
   clarification: string | null;
 }

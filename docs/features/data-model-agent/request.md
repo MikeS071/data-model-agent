@@ -1,7 +1,7 @@
 ---
 kind: request
 version: 1
-revision: 3
+revision: 4
 status: accepted
 slug: data-model-agent
 ---
@@ -14,7 +14,8 @@ Give Michal a resilient, AustralianSuper-branded single-user Next.js workspace f
 developing, reviewing, revising, saving and exporting insurance data models from
 requirements and existing technical artifacts. Generation must remain observable and
 recoverable during long model-provider calls. CSV data extracts can inform model
-structure without sending the complete extract or likely personal data to the provider.
+structure without sending the complete extract to the provider. The user reviews the
+exact sampled values and decides which columns require masking.
 
 ## Intent source
 
@@ -41,6 +42,8 @@ Direct user guided intake.
 - CSV input uses text-based comma-separated files; spreadsheet workbooks are not CSV.
 - A CSV may not have an obvious header row, so the application may infer candidate
   headers but the user confirms or corrects them before provider use.
+- CSV samples are unmasked by default. The user is responsible for marking sensitive
+  columns before confirming provider use.
 - Automated tests use fake providers; a bounded live local bridge check is sufficient to
   prove the signed-in VS Code provider path.
 
@@ -68,9 +71,10 @@ CSV fixtures, then inspect the saved and reloaded request.
 ### CSV-IMPORT-REVIEW
 
 **Outcome:** Attaching a CSV produces a review step showing the inferred header, column
-profile and masked sample. The user can confirm or correct the inferred header before the
-CSV becomes eligible for generation. Editing the original CSV invalidates that
-confirmation, recomputes the analysis and requires confirmation again.
+profile and exact provider-bound sample. The user can confirm or correct the inferred
+header and can mark any column sensitive before the CSV becomes eligible for generation.
+Editing the original CSV invalidates that confirmation, recomputes the analysis and
+requires confirmation again.
 
 **Proof:** Exercise header-present, ambiguous-header and headerless fixtures; assert the
 preview, correction and confirmation states; edit a confirmed CSV and prove generation
@@ -79,14 +83,15 @@ remains blocked until the recomputed analysis is confirmed.
 ### CSV-PROVIDER-CONTEXT
 
 **Outcome:** Generation and chat receive CSV headers, inferred column profiles and a
-deterministic distributed sample of at most 100 rows. Likely identifiers and personal
-data are masked in sampled values while type and format evidence remains available. The
-complete raw CSV is never included in a provider request.
+deterministic distributed sample of at most 100 rows. Sampled values are unchanged by
+default; values in columns explicitly marked sensitive by the user are replaced with
+stable project-scoped pseudonyms. The complete raw CSV is never included in a provider
+request, and confirmation clearly discloses that unmarked sampled values will be sent.
 
 **Proof:** Use a large fixture containing names, email addresses, phone numbers, account
 identifiers and ordinary business values; inspect the exact fake-provider request for
-stable distributed sampling, useful profiles, masked sensitive values and absence of raw
-file content or unsampled sentinel values.
+stable distributed sampling, useful profiles, unchanged unmarked samples, pseudonymized
+user-marked columns and absence of complete raw file content or unsampled sentinel values.
 
 ### CSV-VALIDATION
 
@@ -229,7 +234,6 @@ build and UI checks introduced by the implementation.
 
 ## Approval
 
-Status: accepted. On 2026-10-01, Michal accepted revision 3 after selecting confirmed
-header inference, deterministic distributed sampling of at most 100 rows, provider-safe
-column profiling, automatic masking of likely identifiers and personal data, and
-confirmation invalidation after edits.
+Status: accepted. On 2026-10-01, Michal accepted revision 4 after automatic sensitivity
+detection proved too broad. CSV samples are unmasked by default; users explicitly mark
+columns for project-scoped pseudonymization and confirm the exact provider-bound sample.

@@ -18,7 +18,7 @@ consistent Mermaid and draw.io outputs.
 ## Purpose
 
 Data Model Agent is a local-first modelling workspace for turning incomplete business
-requirements, schemas, DDL and documentation into one editable canonical data model.
+requirements, schemas, DDL, documentation and provider-safe CSV profiles into one editable canonical data model.
 It combines structured editing with an AI-assisted clarification workflow, then derives
 Mermaid ER and draw.io representations from the same source of truth.
 
@@ -59,6 +59,13 @@ flowchart LR
 The browser never receives the provider credential. DDL and SQL inputs are treated as
 inert text and are never executed. Provider responses are validated before they replace
 the saved working draft.
+
+CSV files remain local source artifacts. Before generation, the server infers and profiles
+columns and selects at most 100 deterministic distributed rows. Sampled values are
+provider-bound and unchanged by default; users explicitly mark columns that should use
+project-scoped pseudonyms. Users confirm or correct the inferred headers and exact sample;
+complete raw CSV content is never added to provider requests or durable generation-job
+snapshots.
 
 ## Technology
 
@@ -197,14 +204,17 @@ by the settings UI.
 ## Usage
 
 1. Select **New model**, enter a model name and describe the domain in **Requirements**.
-2. Attach any relevant Markdown, schema, SQL, DDL or JSON files.
+2. Attach any relevant Markdown, schema, SQL, DDL, JSON or CSV files.
+   Review each CSV's inferred headers, column profiles and provider-bound sample, mark any
+   columns that should be masked, then confirm it.
 3. Choose **Save model** to keep the intake without contacting the provider, or
    **Generate draft** to create the first canonical model.
 4. Follow the durable generation job's phases, elapsed time, heartbeat and provider transcript.
    The job survives page reloads; jobs still running after an application restart are marked
    interrupted and can be retried.
 5. In the model detail screen, edit the persistent requirements, attachment text, provider and
-   model used by subsequent requests. Save those generation inputs without contacting the provider.
+   model used by subsequent requests. Editing a CSV invalidates its confirmation; analyse and
+   confirm the updated provider-safe preview before generating again.
 6. The canonical model changes only after the complete response passes schema and domain validation.
 7. Review the live Mermaid or draw.io view alongside the model assistant. Answer the
    displayed clarification question or request another change in chat.

@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { parseGenerationResult, validateCanonicalModel } from '@/domain/model';
-import type { CanonicalModel, GenerationResult, SourceArtifact, SourceArtifactInput } from '@/domain/model';
+import type { CanonicalModel, CsvAnalysis, GenerationResult, ProviderSourceInput, SourceArtifact, SourceArtifactInput } from '@/domain/model';
 import { normalizeProviderBaseUrl, parseProviderSettings } from '@/domain/provider-settings';
 import { parseProviderSelection } from '@/domain/provider-settings';
 import { parseStoredProviderSelection } from '@/domain/provider-settings';
@@ -62,14 +62,22 @@ interface ProjectProviderSettingsRow extends ProviderSettingsRow { provider_type
 interface GenerationJobRow {
   id: string; project_id: string; status: GenerationJobStatus; provider_type: ProviderType; base_url: string; model: string;
   request_json: string; phase: string; message: string; transcript: string; error_code: string | null;
+  retry_of_job_id: string | null;
   created_at: string; started_at: string | null; heartbeat_at: string | null; completed_at: string | null; updated_at: string;
 }
+interface CsvAnalysisRow {
+  source_id: string; content_digest: string; analysis_version: number; masking_generation_id: string;
+  inferred_header_mode: CsvAnalysis['inferredHeaderMode']; header_mode: CsvAnalysis['headerMode'];
+  headers_json: string; row_count: number; column_count: number; profiles_json: string; sample_json: string;
+  additional_sensitive_json: string; confirmed: number; confirmed_at: string | null;
+}
+interface MaskingKeyRow { key_bytes: Uint8Array; generation_id: string }
 
 export type GenerationJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
 
 export interface GenerationJobRequest {
   requirements: string;
-  sources: SourceArtifactInput[];
+  sources: ProviderSourceInput[];
   currentModel: CanonicalModel | null;
   clarification: string | null;
 }
@@ -84,6 +92,7 @@ export interface GenerationJobRecord {
   message: string;
   transcript: string;
   error: string | null;
+  retryOfJobId: string | null;
   createdAt: string;
   startedAt: string | null;
   heartbeatAt: string | null;
@@ -91,8 +100,23 @@ export interface GenerationJobRecord {
   updatedAt: string;
 }
 
+export interface CsvMaskingContext {
+  key: Uint8Array;
+  generationId: string;
+  intakeSessionId: string | null;
+}
+
+export interface CsvProjectInput {
+  title: string;
+  requirements: string;
+  sources: SourceArtifactInput[];
+  providerSettings?: ProviderSelection;
+  intakeSessionId?: string | null;
+}
+
 const now = () => new Date().toISOString();
 const GENERATION_STALE_AFTER_MS = 60_000;
+const LATEST_SCHEMA_VERSION = 8;
 const decodeGeneration = (row: DraftRow): GenerationResult => parseGenerationResult({
   model: JSON.parse(row.model_json), assumptions: JSON.parse(row.assumptions_json),
   warnings: JSON.parse(row.warnings_json), clarificationQuestions: JSON.parse(row.questions_json),
@@ -106,12 +130,24 @@ export class SqliteModelRepository {
     mkdirSync(dirname(path), { recursive: true });
     this.#nowMs = options.now ?? Date.now;
     this.#database = new DatabaseSync(path);
+    const hasMigrations = this.#database.prepare(
+      "SELECT 1 AS value FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
+    ).get();
+    if (hasMigrations) {
+      const version = (this.#database.prepare('SELECT COALESCE(MAX(version),0) AS value FROM schema_migrations').get() as { value: number }).value;
+      if (version > LATEST_SCHEMA_VERSION) {
+        this.#database.close();
+        throw new Error('database-schema-newer');
+      }
+    }
     this.#database.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
     this.migrate();
   }
 
   migrate() {
-    this.#database.exec(`
+    this.#database.exec('BEGIN IMMEDIATE');
+    try {
+      this.#database.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY, title TEXT NOT NULL, requirements TEXT NOT NULL,
@@ -168,9 +204,27 @@ export class SqliteModelRepository {
         status TEXT NOT NULL CHECK(status IN ('queued','running','completed','failed','interrupted','cancelled')),
         provider_type TEXT NOT NULL, base_url TEXT NOT NULL, model TEXT NOT NULL, request_json TEXT NOT NULL,
         phase TEXT NOT NULL, message TEXT NOT NULL, transcript TEXT NOT NULL DEFAULT '', error_code TEXT,
-        created_at TEXT NOT NULL, started_at TEXT, heartbeat_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL
+        retry_of_job_id TEXT, created_at TEXT NOT NULL, started_at TEXT, heartbeat_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS generation_jobs_project_created ON generation_jobs(project_id,created_at DESC);
+      CREATE TABLE IF NOT EXISTS csv_intake_sessions (
+        id TEXT PRIMARY KEY, key_bytes BLOB NOT NULL, generation_id TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS project_csv_masking_keys (
+        project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+        key_bytes BLOB NOT NULL, generation_id TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS csv_source_analyses (
+        source_id TEXT PRIMARY KEY REFERENCES source_artifacts(id) ON DELETE CASCADE,
+        content_digest TEXT NOT NULL, analysis_version INTEGER NOT NULL, masking_generation_id TEXT NOT NULL,
+        inferred_header_mode TEXT NOT NULL CHECK(inferred_header_mode IN ('first-row','generated')),
+        header_mode TEXT NOT NULL CHECK(header_mode IN ('first-row','generated')),
+        headers_json TEXT NOT NULL, row_count INTEGER NOT NULL, column_count INTEGER NOT NULL,
+        profiles_json TEXT NOT NULL, sample_json TEXT NOT NULL, additional_sensitive_json TEXT NOT NULL,
+        confirmed INTEGER NOT NULL CHECK(confirmed IN (0,1)), confirmed_at TEXT, updated_at TEXT NOT NULL
+      );
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (2);
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (3);
@@ -178,9 +232,7 @@ export class SqliteModelRepository {
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (5);
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (6);
     `);
-    const timestamp = now();
-    this.#database.exec('BEGIN IMMEDIATE');
-    try {
+      const timestamp = now();
       this.#database.prepare(`UPDATE generation_jobs SET status='interrupted',phase='interrupted',
         message='A newer generation replaced this duplicate active job.',error_code='generation-interrupted',
         completed_at=?,updated_at=? WHERE id IN (
@@ -191,7 +243,12 @@ export class SqliteModelRepository {
         )`).run(timestamp, timestamp);
       this.#database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS generation_jobs_one_active_per_project
         ON generation_jobs(project_id) WHERE status IN ('queued','running')`);
+      const jobColumns = this.#database.prepare('PRAGMA table_info(generation_jobs)').all() as unknown as Array<{ name: string }>;
+      if (!jobColumns.some(column => column.name === 'retry_of_job_id')) {
+        this.#database.exec('ALTER TABLE generation_jobs ADD COLUMN retry_of_job_id TEXT');
+      }
       this.#database.prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES (7)').run();
+      this.#database.prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES (8)').run();
       this.#database.exec('COMMIT');
     } catch (error) {
       this.#database.exec('ROLLBACK');
@@ -243,26 +300,128 @@ export class SqliteModelRepository {
     return value;
   }
 
-  createProject(input: { title: string; requirements: string; sources: SourceArtifactInput[]; providerSettings?: ProviderSelection }): ProjectRecord {
-    const id = randomUUID(), timestamp = now();
-    if (!input.title.trim() || !input.requirements.trim()) throw new Error('project-input-invalid');
+  getCsvMaskingContext(input: { projectId?: string; intakeSessionId?: string | null } = {}): CsvMaskingContext {
+    const timestamp = now();
+    this.#database.prepare('DELETE FROM csv_intake_sessions WHERE expires_at<=?').run(timestamp);
+    if (input.projectId) {
+      if (!this.#database.prepare('SELECT 1 AS value FROM projects WHERE id=?').get(input.projectId)) throw new Error('project-missing');
+      let row = this.#database.prepare('SELECT key_bytes,generation_id FROM project_csv_masking_keys WHERE project_id=?')
+        .get(input.projectId) as MaskingKeyRow | undefined;
+      if (!row) {
+        this.#database.exec('BEGIN IMMEDIATE');
+        try {
+          row = this.#database.prepare('SELECT key_bytes,generation_id FROM project_csv_masking_keys WHERE project_id=?')
+            .get(input.projectId) as MaskingKeyRow | undefined;
+          if (!row) {
+            const analyses = (this.#database.prepare(`SELECT COUNT(*) AS value FROM csv_source_analyses a
+              JOIN source_artifacts s ON s.id=a.source_id WHERE s.project_id=?`).get(input.projectId) as { value: number }).value;
+            if (analyses > 0) throw new Error('csv-masking-key-invalid');
+            const generationId = randomUUID(), key = randomBytes(32);
+            this.#database.prepare(`INSERT INTO project_csv_masking_keys(project_id,key_bytes,generation_id,created_at,updated_at)
+              VALUES (?,?,?,?,?)`).run(input.projectId, key, generationId, timestamp, timestamp);
+            row = { key_bytes: key, generation_id: generationId };
+          }
+          this.#database.exec('COMMIT');
+        } catch (error) {
+          this.#database.exec('ROLLBACK');
+          throw error;
+        }
+      }
+      return { key: row.key_bytes, generationId: row.generation_id, intakeSessionId: null };
+    }
+    if (input.intakeSessionId) {
+      const row = this.#database.prepare(`SELECT key_bytes,generation_id FROM csv_intake_sessions
+        WHERE id=? AND expires_at>?`).get(input.intakeSessionId, timestamp) as MaskingKeyRow | undefined;
+      if (!row) throw new Error('csv-intake-session-expired');
+      return { key: row.key_bytes, generationId: row.generation_id, intakeSessionId: input.intakeSessionId };
+    }
+    const id = randomUUID(), generationId = randomUUID(), key = randomBytes(32);
+    const expiresAt = new Date(this.#nowMs() + 24 * 60 * 60 * 1000).toISOString();
+    this.#database.prepare('INSERT INTO csv_intake_sessions(id,key_bytes,generation_id,created_at,expires_at) VALUES (?,?,?,?,?)')
+      .run(id, key, generationId, timestamp, expiresAt);
+    return { key, generationId, intakeSessionId: id };
+  }
+
+  rotateProjectCsvMaskingKey(projectId: string): CsvMaskingContext {
+    const timestamp = now(), generationId = randomUUID(), key = randomBytes(32);
     this.#database.exec('BEGIN IMMEDIATE');
     try {
+      if (!this.#database.prepare('SELECT 1 AS value FROM projects WHERE id=?').get(projectId)) throw new Error('project-missing');
+      this.#database.prepare(`INSERT INTO project_csv_masking_keys(project_id,key_bytes,generation_id,created_at,updated_at)
+        VALUES (?,?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET key_bytes=excluded.key_bytes,
+        generation_id=excluded.generation_id,updated_at=excluded.updated_at`)
+        .run(projectId, key, generationId, timestamp, timestamp);
+      this.#database.prepare(`UPDATE csv_source_analyses SET confirmed=0,confirmed_at=NULL,
+        masking_generation_id=?,updated_at=? WHERE source_id IN (
+          SELECT id FROM source_artifacts WHERE project_id=?
+        )`).run(generationId, timestamp, projectId);
+      this.#database.exec('COMMIT');
+      return { key, generationId, intakeSessionId: null };
+    } catch (error) {
+      this.#database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  validateProjectCsvMaskingGeneration(projectId: string, generationIds: string[]) {
+    if (!generationIds.length) return;
+    this.#database.exec('BEGIN IMMEDIATE');
+    let invalid = false;
+    try {
+      const row = this.#database.prepare('SELECT generation_id FROM project_csv_masking_keys WHERE project_id=?')
+        .get(projectId) as { generation_id: string } | undefined;
+      invalid = !row || generationIds.some(generationId => generationId !== row.generation_id);
+      if (invalid) {
+        this.#database.prepare(`UPDATE csv_source_analyses SET confirmed=0,confirmed_at=NULL,updated_at=?
+          WHERE source_id IN (SELECT id FROM source_artifacts WHERE project_id=?)`).run(now(), projectId);
+      }
+      this.#database.exec('COMMIT');
+    } catch (error) {
+      this.#database.exec('ROLLBACK');
+      throw error;
+    }
+    if (invalid) throw new Error('csv-masking-key-invalid');
+  }
+
+  createProject(input: CsvProjectInput): ProjectRecord {
+    const id = randomUUID(), timestamp = now();
+    if (!input.title.trim() || !input.requirements.trim()) throw new Error('project-input-invalid');
+    const csvSources = input.sources.filter(source => source.kind === 'csv');
+    const intakeSessionId = input.intakeSessionId ?? null;
+    this.#database.exec('BEGIN IMMEDIATE');
+    try {
+      let intakeContext: MaskingKeyRow | undefined;
+      if (csvSources.length) {
+        if (!intakeSessionId) throw new Error('csv-intake-session-expired');
+        intakeContext = this.#database.prepare(`SELECT key_bytes,generation_id FROM csv_intake_sessions
+          WHERE id=? AND expires_at>?`).get(intakeSessionId, timestamp) as MaskingKeyRow | undefined;
+        if (!intakeContext) throw new Error('csv-intake-session-expired');
+        if (csvSources.some(source => source.csvAnalysis?.maskingGenerationId !== intakeContext!.generation_id)) {
+          throw new Error('csv-confirmation-stale');
+        }
+      }
       this.#database.prepare('INSERT INTO projects(id,title,requirements,created_at,updated_at) VALUES (?,?,?,?,?)')
         .run(id, input.title.trim(), input.requirements, timestamp, timestamp);
-      const insert = this.#database.prepare('INSERT INTO source_artifacts(id,project_id,name,kind,content,ordinal) VALUES (?,?,?,?,?,?)');
-      input.sources.forEach((source, ordinal) => insert.run(randomUUID(), id, source.name, source.kind, source.content, ordinal));
+      if (intakeContext) {
+        this.#database.prepare(`INSERT INTO project_csv_masking_keys(project_id,key_bytes,generation_id,created_at,updated_at)
+          VALUES (?,?,?,?,?)`).run(id, intakeContext.key_bytes, intakeContext.generation_id, timestamp, timestamp);
+      }
+      this.#insertSources(id, input.sources, timestamp);
       if (input.providerSettings) {
         const provider = parseStoredProviderSelection(input.providerSettings);
         this.#database.prepare('INSERT INTO project_provider_settings(project_id,provider_type,base_url,model,updated_at) VALUES (?,?,?,?,?)')
           .run(id, provider.providerType, provider.baseUrl, provider.model, timestamp);
+      }
+      if (intakeContext && intakeSessionId) {
+        const consumed = this.#database.prepare('DELETE FROM csv_intake_sessions WHERE id=?').run(intakeSessionId);
+        if (consumed.changes !== 1) throw new Error('csv-intake-session-expired');
       }
       this.#database.exec('COMMIT');
     } catch (error) { this.#database.exec('ROLLBACK'); throw error; }
     return this.getProject(id)!;
   }
 
-  updateProject(id: string, input: { title: string; requirements: string; sources: SourceArtifactInput[]; providerSettings?: ProviderSelection }): ProjectRecord {
+  updateProject(id: string, input: CsvProjectInput): ProjectRecord {
     const title = input.title.trim(), requirements = input.requirements.trim(), timestamp = now();
     if (!title || !requirements) throw new Error('project-input-invalid');
     this.#database.exec('BEGIN IMMEDIATE');
@@ -270,9 +429,16 @@ export class SqliteModelRepository {
       const result = this.#database.prepare('UPDATE projects SET title=?,requirements=?,updated_at=? WHERE id=?')
         .run(title, requirements, timestamp, id);
       if (result.changes !== 1) throw new Error('project-missing');
+      const csvSources = input.sources.filter(source => source.kind === 'csv');
+      if (csvSources.length) {
+        const key = this.#database.prepare('SELECT generation_id FROM project_csv_masking_keys WHERE project_id=?')
+          .get(id) as { generation_id: string } | undefined;
+        if (!key || csvSources.some(source => source.csvAnalysis?.maskingGenerationId !== key.generation_id)) {
+          throw new Error('csv-confirmation-stale');
+        }
+      }
       this.#database.prepare('DELETE FROM source_artifacts WHERE project_id=?').run(id);
-      const insert = this.#database.prepare('INSERT INTO source_artifacts(id,project_id,name,kind,content,ordinal) VALUES (?,?,?,?,?,?)');
-      input.sources.forEach((source, ordinal) => insert.run(randomUUID(), id, source.name, source.kind, source.content, ordinal));
+      this.#insertSources(id, input.sources, timestamp);
       if (input.providerSettings) {
         const provider = parseStoredProviderSelection(input.providerSettings);
         this.#database.prepare(`INSERT INTO project_provider_settings(project_id,provider_type,base_url,model,updated_at) VALUES (?,?,?,?,?)
@@ -300,7 +466,12 @@ export class SqliteModelRepository {
     return value;
   }
 
-  createGenerationJob(projectId: string, providerSettings: ProviderSelection, request: GenerationJobRequest): GenerationJobRecord {
+  createGenerationJob(
+    projectId: string,
+    providerSettings: ProviderSelection,
+    request: GenerationJobRequest,
+    retryOfJobId: string | null = null,
+  ): GenerationJobRecord {
     const provider = parseProviderSelection(providerSettings);
     const timestamp = now();
     const id = randomUUID();
@@ -311,9 +482,15 @@ export class SqliteModelRepository {
       if (this.#database.prepare(`SELECT 1 AS value FROM generation_jobs WHERE project_id=? AND status IN ('queued','running')`).get(projectId)) {
         throw new Error('generation-in-progress');
       }
+      if (retryOfJobId) {
+        const prior = this.#database.prepare('SELECT status FROM generation_jobs WHERE id=? AND project_id=?')
+          .get(retryOfJobId, projectId) as { status: GenerationJobStatus } | undefined;
+        if (!prior || prior.status === 'queued' || prior.status === 'running') throw new Error('generation-job-unavailable');
+      }
       this.#database.prepare(`INSERT INTO generation_jobs(id,project_id,status,provider_type,base_url,model,request_json,phase,message,transcript,
-        error_code,created_at,started_at,heartbeat_at,completed_at,updated_at) VALUES (?,?, 'queued',?,?,?,?,'queued','Generation queued.','',NULL,?,NULL,?,NULL,?)`)
-        .run(id, projectId, provider.providerType, provider.baseUrl, provider.model, JSON.stringify(request), timestamp, timestamp, timestamp);
+        error_code,retry_of_job_id,created_at,started_at,heartbeat_at,completed_at,updated_at)
+        VALUES (?,?, 'queued',?,?,?,?,'queued','Generation queued.','',NULL,?,?,NULL,?,NULL,?)`)
+        .run(id, projectId, provider.providerType, provider.baseUrl, provider.model, JSON.stringify(request), retryOfJobId, timestamp, timestamp, timestamp);
       this.#database.exec('COMMIT');
     } catch (error) {
       this.#database.exec('ROLLBACK');
@@ -451,7 +628,14 @@ export class SqliteModelRepository {
     const row = this.#database.prepare('SELECT * FROM projects WHERE id=?').get(id) as ProjectRow | undefined;
     if (!row) return null;
     const sources = (this.#database.prepare('SELECT id,name,kind,content,ordinal FROM source_artifacts WHERE project_id=? ORDER BY ordinal').all(id) as unknown as SourceRow[])
-      .map(source => ({ id: source.id, name: source.name, kind: source.kind, content: source.content, ordinal: source.ordinal }));
+      .map(source => ({
+        id: source.id,
+        name: source.name,
+        kind: source.kind,
+        content: source.content,
+        ordinal: source.ordinal,
+        ...(source.kind === 'csv' ? { csvAnalysis: this.#csvAnalysis(source.id) } : {}),
+      }));
     const draftRow = this.#database.prepare('SELECT model_json,assumptions_json,warnings_json,questions_json FROM working_drafts WHERE project_id=?').get(id) as DraftRow | undefined;
     const versions = (this.#database.prepare('SELECT id,version_number,created_at FROM model_versions WHERE project_id=? ORDER BY version_number DESC').all(id) as unknown as Array<{ id: string; version_number: number; created_at: string }>)
       .map(version => ({ id: version.id, versionNumber: version.version_number, createdAt: version.created_at }));
@@ -481,6 +665,64 @@ export class SqliteModelRepository {
     return rows.map(row => ({ id: row.id, title: row.title, updatedAt: row.updated_at, versionCount: Number(row.version_count), hasDraft: row.has_draft === 1 }));
   }
 
+  #insertSources(projectId: string, sources: SourceArtifactInput[], timestamp: string) {
+    const insertSource = this.#database.prepare(
+      'INSERT INTO source_artifacts(id,project_id,name,kind,content,ordinal) VALUES (?,?,?,?,?,?)',
+    );
+    const insertAnalysis = this.#database.prepare(`INSERT INTO csv_source_analyses(
+      source_id,content_digest,analysis_version,masking_generation_id,inferred_header_mode,header_mode,
+      headers_json,row_count,column_count,profiles_json,sample_json,additional_sensitive_json,
+      confirmed,confirmed_at,updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    sources.forEach((source, ordinal) => {
+      const sourceId = randomUUID();
+      insertSource.run(sourceId, projectId, source.name, source.kind, source.content, ordinal);
+      if (source.kind === 'csv') {
+        const analysis = source.csvAnalysis;
+        if (!analysis) throw new Error('csv-analysis-required');
+        insertAnalysis.run(
+          sourceId,
+          analysis.contentDigest,
+          analysis.analysisVersion,
+          analysis.maskingGenerationId,
+          analysis.inferredHeaderMode,
+          analysis.headerMode,
+          JSON.stringify(analysis.headers),
+          analysis.rowCount,
+          analysis.columnCount,
+          JSON.stringify(analysis.columns),
+          JSON.stringify(analysis.sampleRows),
+          JSON.stringify(analysis.additionalSensitiveColumns),
+          analysis.confirmed ? 1 : 0,
+          analysis.confirmedAt,
+          timestamp,
+        );
+      }
+    });
+  }
+
+  #csvAnalysis(sourceId: string): CsvAnalysis | null {
+    const row = this.#database.prepare('SELECT * FROM csv_source_analyses WHERE source_id=?')
+      .get(sourceId) as CsvAnalysisRow | undefined;
+    if (!row) return null;
+    return {
+      analysisVersion: row.analysis_version,
+      contentDigest: row.content_digest,
+      maskingGenerationId: row.masking_generation_id,
+      intakeSessionId: null,
+      inferredHeaderMode: row.inferred_header_mode,
+      headerMode: row.header_mode,
+      headers: JSON.parse(row.headers_json) as string[],
+      rowCount: row.row_count,
+      columnCount: row.column_count,
+      columns: JSON.parse(row.profiles_json) as CsvAnalysis['columns'],
+      sampleRows: JSON.parse(row.sample_json) as CsvAnalysis['sampleRows'],
+      additionalSensitiveColumns: JSON.parse(row.additional_sensitive_json) as number[],
+      confirmed: row.confirmed === 1,
+      confirmedAt: row.confirmed_at,
+    };
+  }
+
   validateDraft(model: unknown): CanonicalModel { return validateCanonicalModel(model); }
   #generationJob(row: GenerationJobRow): GenerationJobRecord {
     return {
@@ -493,6 +735,7 @@ export class SqliteModelRepository {
       message: row.message,
       transcript: row.transcript,
       error: row.error_code,
+      retryOfJobId: row.retry_of_job_id,
       createdAt: row.created_at,
       startedAt: row.started_at,
       heartbeatAt: row.heartbeat_at,

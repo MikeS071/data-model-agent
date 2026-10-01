@@ -9,6 +9,8 @@ describe('source artifact boundary', () => {
       { name: 'schema.sql', kind: 'sql', content: 'CREATE TABLE claim(id UUID);' },
       { name: 'schema.ddl', kind: 'ddl', content: 'ALTER TABLE claim ADD amount DECIMAL;' },
       { name: 'schema.json', kind: 'json', content: '{"entity":"Claim"}' },
+      { name: 'claims.csv', kind: 'csv', content: 'claim_id,amount\n1,10.00' },
+      { name: ' exact filename .csv ', kind: 'csv', content: 'value\n1' },
     ]);
     expect(actual.map(source => [source.kind, source.content])).toEqual([
       ['text', 'free-form\nrequirements'],
@@ -16,12 +18,15 @@ describe('source artifact boundary', () => {
       ['sql', 'CREATE TABLE claim(id UUID);'],
       ['ddl', 'ALTER TABLE claim ADD amount DECIMAL;'],
       ['json', '{"entity":"Claim"}'],
+      ['csv', 'claim_id,amount\n1,10.00'],
+      ['csv', 'value\n1'],
     ]);
+    expect(actual.at(-1)?.name).toBe(' exact filename .csv ');
   });
 
   it('refuses binary, unsupported and oversized artifacts before provider access', () => {
     expect(() => normalizeSourceArtifacts([{ name: 'bad.exe', kind: 'text', content: 'MZ\0binary' }])).toThrow('source-binary');
-    expect(() => normalizeSourceArtifacts([{ name: 'bad.csv', kind: 'csv' as 'text', content: 'a,b' }])).toThrow('source-kind-unsupported');
+    expect(() => normalizeSourceArtifacts([{ name: 'bad.xml', kind: 'xml' as 'text', content: '<root />' }])).toThrow('source-kind-unsupported');
     expect(() => normalizeSourceArtifacts([{ name: 'large.txt', kind: 'text', content: 'x'.repeat(1_000_001) }])).toThrow('source-too-large');
   });
 });
