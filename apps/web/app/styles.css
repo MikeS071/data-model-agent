@@ -241,6 +241,22 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
 .attachment-editor > div span { color: var(--primary-strong); font-size: .62rem; font-weight: 800; text-transform: uppercase; }
 .attachment-editor > div button { margin-left: auto; }
 .attachment-editor textarea { border: 0; border-radius: 0; margin: 0; min-height: 150px; }
+.csv-review { background: #fbfafc; border: 1px solid var(--border); border-radius: 8px; display: grid; gap: 12px; margin: 10px; padding: 14px; }
+.csv-review.needs-review { border-color: var(--warning); }
+.csv-review.confirmed { border-color: #9eb9a8; }
+.csv-review-heading, .csv-review-actions { align-items: center; display: flex; gap: 14px; justify-content: space-between; }
+.csv-review-heading > div { display: grid; gap: 3px; }
+.csv-review-heading span, .csv-review-actions p { color: var(--muted); font-size: .72rem; margin: 0; }
+.csv-header-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.csv-header-grid label { margin: 0; }
+.csv-profile-scroll { max-width: 100%; overflow: auto; }
+.csv-profile-table { border-collapse: collapse; font-size: .72rem; min-width: 680px; width: 100%; }
+.csv-profile-table th, .csv-profile-table td { border-bottom: 1px solid var(--border); max-width: 220px; padding: 7px 8px; text-align: left; vertical-align: top; word-break: break-word; }
+.csv-profile-table thead th { background: var(--surface-subtle); color: var(--primary-strong); position: sticky; top: 0; }
+.csv-sensitive-choice { align-items: center; display: flex; font-size: .7rem; gap: 6px; margin: 0; text-transform: none; }
+.csv-sensitive-choice input { min-height: 0; width: auto; }
+.csv-sample { border-top: 1px solid var(--border); padding-top: 8px; }
+.csv-sample summary { font-size: .76rem; }
 .model-fields { display: grid; gap: 12px; grid-template-columns: minmax(180px, .75fr) minmax(260px, 1.25fr); margin-bottom: 18px; }
 .model-fields label { margin: 0; }
 .entity-grid { display: grid; gap: 10px; }
@@ -407,6 +423,8 @@ input:disabled, textarea:disabled, select:disabled { background: var(--surface-s
   .hero h1 { font-size: 2.5rem; }
   .intake-card, .settings-card, .editor-card, .assistant-card, .preview-card, .history-card { padding: 18px 14px; }
   .model-header { align-items: flex-start; flex-direction: column; padding: 18px; }
+  .csv-review-heading, .csv-review-actions { align-items: flex-start; flex-direction: column; }
+  .csv-review-actions button { width: 100%; }
   .header-actions { flex: 0 1 auto; justify-content: flex-start; width: 100%; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
   .provider-activity { padding: 18px 14px; }

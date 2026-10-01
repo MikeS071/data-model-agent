@@ -10,7 +10,15 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
-import type { CanonicalModel, GenerationResult, SourceArtifact, SourceArtifactInput, SourceKind } from '@/domain/model';
+import type {
+  CanonicalModel,
+  CsvAnalysis,
+  CsvHeaderMode,
+  GenerationResult,
+  SourceArtifact,
+  SourceArtifactInput,
+  SourceKind,
+} from '@/domain/model';
 import { renderMermaidSvg } from '@/render/mermaid-client';
 
 interface VersionSummary { id: string; versionNumber: number; createdAt: string }
@@ -29,6 +37,7 @@ type GenerationJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'inte
 interface GenerationJob {
   id: string; projectId: string; status: GenerationJobStatus; providerSettings: ProviderSelection;
   phase: string; message: string; transcript: string; error: string | null;
+  retryOfJobId: string | null;
   createdAt: string; startedAt: string | null; heartbeatAt: string | null; completedAt: string | null; updatedAt: string;
 }
 type ProviderProgressPhase = 'connecting' | 'selecting-model' | 'preparing' | 'generating' | 'receiving' | 'validating' | 'saving';
@@ -56,7 +65,7 @@ const providerLabels: Record<ProviderType, string> = {
 const sourceKind = (name: string): SourceKind | null => {
   const extension = name.toLowerCase().split('.').pop();
   return extension === 'md' ? 'markdown' : extension === 'sql' ? 'sql' : extension === 'ddl' ? 'ddl'
-    : extension === 'json' ? 'json' : extension === 'txt' ? 'text' : null;
+    : extension === 'json' ? 'json' : extension === 'csv' ? 'csv' : extension === 'txt' ? 'text' : null;
 };
 const errorMessages: Record<string, string> = {
   'provider-timeout': 'The provider did not finish within the configured time. Your model is saved; retry or increase the configured provider timeout.',
@@ -71,6 +80,19 @@ const errorMessages: Record<string, string> = {
   'generation-cancelled': 'Generation was cancelled.',
   'clipboard-image-unavailable': 'Image copy is unavailable in this browser. Use Export PDF instead.',
   'model-export-failed': 'The model could not be exported. Retry after the diagram finishes rendering.',
+  'csv-encoding-invalid': 'CSV files must be valid UTF-8 text.',
+  'csv-malformed': 'The CSV could not be parsed. Check quoting, commas and embedded line breaks.',
+  'csv-empty': 'The CSV must contain at least one data row.',
+  'csv-columns-exceeded': 'The CSV has too many columns.',
+  'csv-rows-exceeded': 'The CSV has too many rows.',
+  'csv-width-inconsistent': 'Every CSV row must contain the same number of columns.',
+  'csv-header-invalid': 'CSV column names must be non-empty and unique.',
+  'csv-sensitive-columns-invalid': 'The selected sensitive CSV columns are invalid. Reanalyse the file.',
+  'csv-analysis-required': 'Review this CSV before saving it.',
+  'csv-confirmation-required': 'Confirm every CSV review before generation.',
+  'csv-confirmation-stale': 'The CSV changed after review. Reanalyse and confirm it again.',
+  'csv-intake-session-expired': 'The CSV review session expired. Reanalyse the CSV.',
+  'csv-masking-key-invalid': 'The CSV masking key changed. Reanalyse and confirm each CSV again.',
 };
 const message = (error: unknown) => error instanceof Error ? errorMessages[error.message] ?? error.message : 'Something went wrong.';
 
@@ -131,7 +153,7 @@ async function requestProjectStream(url: string, init: RequestInit, onProgress: 
 const projectIntake = (project: Project) => ({
   title: project.title,
   requirements: project.requirements,
-  sources: project.sources.map(({ name, kind, content }) => ({ name, kind, content })),
+  sources: project.sources.map(({ name, kind, content, csvAnalysis }) => ({ name, kind, content, csvAnalysis })),
 });
 
 const progressSteps: Array<{ phase: ProviderProgressPhase; label: string }> = [
@@ -203,10 +225,76 @@ const ProviderActivityPanel = memo(function ProviderActivityPanel({
     </details>
     <div className="activity-footer"><p className="activity-safety">The working model is replaced only after the complete response passes schema and domain validation.</p>
       {activity.active && onCancel && <button className="secondary-button" type="button" onClick={onCancel}>Cancel generation</button>}
-      {!activity.active && onRetry && <button className="primary-button" type="button" onClick={onRetry}>Retry generation</button>}
+      {!activity.active && onRetry && <button className="primary-button" type="button" onClick={onRetry}>Retry with current inputs</button>}
     </div>
   </section>;
 });
+
+function CsvReview({
+  source,
+  disabled,
+  onHeadersChange,
+  onHeaderModeChange,
+  onSensitiveChange,
+  onConfirm,
+  onReanalyse,
+}: {
+  source: SourceArtifactInput;
+  disabled: boolean;
+  onHeadersChange: (headers: string[]) => void;
+  onHeaderModeChange: (mode: CsvHeaderMode) => void;
+  onSensitiveChange: (index: number, sensitive: boolean) => void;
+  onConfirm: () => void;
+  onReanalyse: () => void;
+}) {
+  const analysis = source.csvAnalysis;
+  if (!analysis || !analysis.contentDigest) return <section className="csv-review needs-review" aria-label={`CSV review ${source.name}`}>
+    <div><strong>CSV review required</strong><span>The file changed or has not been analysed.</span></div>
+    <button className="secondary-button" type="button" disabled={disabled} onClick={onReanalyse}>Analyse CSV</button>
+  </section>;
+  return <section className={`csv-review${analysis.confirmed ? ' confirmed' : ' needs-review'}`} aria-label={`CSV review ${source.name}`}>
+    <div className="csv-review-heading">
+      <div><strong>{analysis.confirmed ? 'CSV confirmed' : 'Confirm CSV interpretation'}</strong>
+        <span>{analysis.rowCount.toLocaleString()} rows · {analysis.columnCount} columns · sample {analysis.sampleRows.length} rows</span></div>
+      <span className="count-badge">{analysis.confirmed ? 'Confirmed' : 'Review'}</span>
+    </div>
+    <label>Header interpretation<select value={analysis.headerMode} disabled={disabled} onChange={event => onHeaderModeChange(event.target.value as CsvHeaderMode)}>
+      <option value="first-row">First row contains headers</option>
+      <option value="generated">Generate column names; first row is data</option>
+    </select></label>
+    <div className="csv-header-grid">{analysis.headers.map((header, index) => <label key={index}>
+      Column {index + 1}<input value={header} disabled={disabled} onChange={event => {
+        const headers = [...analysis.headers];
+        headers[index] = event.target.value;
+        onHeadersChange(headers);
+      }} />
+    </label>)}</div>
+    <div className="csv-profile-scroll"><table className="csv-profile-table">
+      <thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Unique</th><th>Formats</th><th>Sensitive</th></tr></thead>
+      <tbody>{analysis.columns.map(column => {
+        const automatic = column.sensitivity.some(value => value !== 'manual');
+        const manuallySensitive = analysis.additionalSensitiveColumns.includes(column.index);
+        return <tr key={column.index}><th>{analysis.headers[column.index]}</th><td>{column.inferredType}</td>
+          <td>{Math.round(column.nullRatio * 100)}%</td><td>{Math.round(column.uniqueRatio * 100)}%</td>
+          <td>{column.formats.join(', ') || '—'}</td><td><label className="csv-sensitive-choice">
+            <input type="checkbox" checked={automatic || manuallySensitive} disabled={disabled || automatic}
+              onChange={event => onSensitiveChange(column.index, event.target.checked)} />
+            {automatic ? column.sensitivity.filter(value => value !== 'manual').join(', ') : 'Mark sensitive'}
+          </label></td></tr>;
+      })}</tbody>
+    </table></div>
+    <details className="csv-sample"><summary>Masked distributed sample <span>{analysis.sampleRows.length} rows</span></summary>
+      <div className="csv-profile-scroll"><table className="csv-profile-table"><thead><tr><th>Row</th>
+        {analysis.headers.map((header, index) => <th key={index}>{header}</th>)}</tr></thead>
+        <tbody>{analysis.sampleRows.map(row => <tr key={row.rowIndex}><th>{row.rowIndex + 1}</th>
+          {row.values.map((value, index) => <td key={index}>{value || '—'}</td>)}</tr>)}</tbody></table></div>
+    </details>
+    <div className="csv-review-actions"><p>Only this profile and masked sample will be sent to the configured provider.</p>
+      <button className={analysis.confirmed ? 'secondary-button' : 'primary-button'} type="button" disabled={disabled} onClick={onConfirm}>
+        {analysis.confirmed ? 'Reconfirm CSV' : 'Confirm CSV'}
+      </button></div>
+  </section>;
+}
 
 function MermaidPreview({ source, onRendered }: { source: string; onRendered?: (ready: boolean) => void }) {
   const [svg, setSvg] = useState('');
@@ -827,13 +915,77 @@ export function ModelWorkbench() {
     if (!files) return;
     setError('');
     try {
-      const sources = await Promise.all([...files].map(async file => {
+      const sources: SourceArtifactInput[] = [];
+      let intakeSessionId = intake.sources.find(source => source.kind === 'csv')?.csvAnalysis?.intakeSessionId ?? null;
+      for (const file of [...files]) {
         const kind = sourceKind(file.name);
         if (!kind) throw new Error(`Unsupported file: ${file.name}`);
-        return { name: file.name, kind, content: await file.text() };
-      }));
+        if (kind === 'csv') {
+          const result = await requestCsvAnalysis(file, { projectId: project?.id, intakeSessionId });
+          intakeSessionId = result.analysis.intakeSessionId;
+          sources.push({ name: file.name, kind, content: result.content, csvAnalysis: result.analysis });
+        } else {
+          sources.push({ name: file.name, kind, content: await file.text() });
+        }
+      }
       setIntake(current => ({ ...current, sources: [...current.sources, ...sources] }));
     } catch (error) { setError(message(error)); }
+  };
+
+  const requestCsvAnalysis = async (
+    file: Blob,
+    options: {
+      name?: string;
+      projectId?: string;
+      intakeSessionId?: string | null;
+      headerMode?: CsvHeaderMode;
+      headers?: string[];
+      additionalSensitiveColumns?: number[];
+      confirmed?: boolean;
+    },
+  ) => {
+    const form = new FormData();
+    form.set('file', file, options.name ?? (file instanceof File ? file.name : 'source.csv'));
+    if (options.projectId) form.set('projectId', options.projectId);
+    if (options.intakeSessionId) form.set('intakeSessionId', options.intakeSessionId);
+    if (options.headerMode) form.set('headerMode', options.headerMode);
+    if (options.headers) form.set('headers', JSON.stringify(options.headers));
+    if (options.additionalSensitiveColumns) form.set('additionalSensitiveColumns', JSON.stringify(options.additionalSensitiveColumns));
+    if (options.confirmed) form.set('confirmed', 'true');
+    const response = await fetch('/api/csv-analysis', { method: 'POST', body: form });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body?.error ?? 'request-failed');
+    return body as { content: string; analysis: CsvAnalysis };
+  };
+
+  const analyseCsvSource = async (
+    index: number,
+    changes: Partial<Pick<CsvAnalysis, 'headerMode' | 'headers' | 'additionalSensitiveColumns'>> = {},
+    confirmed = false,
+  ) => {
+    const source = intake.sources[index];
+    if (!source || source.kind !== 'csv') return;
+    const current = source.csvAnalysis;
+    setError(''); setStatus(confirmed ? 'Confirming CSV…' : 'Analysing CSV…');
+    try {
+      const result = await requestCsvAnalysis(new Blob([source.content], { type: 'text/csv' }), {
+        name: source.name,
+        projectId: project?.id,
+        intakeSessionId: current?.intakeSessionId
+          ?? intake.sources.find(candidate => candidate.kind === 'csv')?.csvAnalysis?.intakeSessionId,
+        headerMode: changes.headerMode ?? current?.headerMode,
+        headers: changes.headers ?? current?.headers,
+        additionalSensitiveColumns: changes.additionalSensitiveColumns ?? current?.additionalSensitiveColumns,
+        confirmed,
+      });
+      setIntake(value => ({
+        ...value,
+        sources: value.sources.map((candidate, candidateIndex) => candidateIndex === index
+          ? { ...candidate, content: result.content, csvAnalysis: result.analysis }
+          : candidate),
+      }));
+      setStatus(result.analysis.confirmed ? 'CSV confirmed' : 'CSV ready for review');
+    } catch (error) { setError(message(error)); setStatus('CSV analysis failed'); }
   };
 
   const persistIntake = async () => {
@@ -900,9 +1052,10 @@ export function ModelWorkbench() {
     } catch (error) { setError(message(error)); setStatus('Save failed'); }
   };
 
-  const generate = async () => {
+  const generate = async (retryOfJobId: string | null = null) => {
     setError(''); setStatus('Preparing draft…');
     try {
+      if (!csvInputsConfirmed) throw new Error('csv-confirmation-required');
       if (project?.draft && dirty) {
         const revision = editRevision.current;
         await requestJson<GenerationResult>(`/api/projects/${project.id}/draft`, {
@@ -912,7 +1065,8 @@ export function ModelWorkbench() {
       }
       const target = await persistIntake();
       const job = await requestJson<GenerationJob>(`/api/projects/${target.id}/generation-jobs`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clarification: null }),
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clarification: null, retryOfJobId }),
       });
       setGenerationJob(job);
       setProviderActivity(activityFromJob(job));
@@ -1079,9 +1233,13 @@ export function ModelWorkbench() {
   // version save; saveVersion writes the latest in-memory draft before snapshotting.
   const busy = providerActivity?.active || status.endsWith('…') && status !== 'Saving draft…';
   const generationLocked = Boolean(providerActivity?.active);
+  const retryOriginId = generationJob && ['failed', 'interrupted', 'cancelled'].includes(generationJob.status)
+    ? generationJob.id : null;
+  const csvInputsAnalysed = intake.sources.every(source => source.kind !== 'csv' || Boolean(source.csvAnalysis?.contentDigest));
+  const csvInputsConfirmed = intake.sources.every(source => source.kind !== 'csv' || source.csvAnalysis?.confirmed);
   const generationInputsDirty = Boolean(project?.draft && (
     intake.requirements !== project.requirements
-    || JSON.stringify(intake.sources) !== JSON.stringify(project.sources.map(({ name, kind, content }) => ({ name, kind, content })))
+    || JSON.stringify(intake.sources) !== JSON.stringify(project.sources.map(({ name, kind, content, csvAnalysis }) => ({ name, kind, content, csvAnalysis })))
     || projectProviderDirty
   ));
   return <main className="app-shell">
@@ -1132,12 +1290,12 @@ export function ModelWorkbench() {
           <section className="panel model-header">
             <div><h1>{project.title}</h1><p>A validated model will replace this activity view when generation completes.</p></div>
             <div className="header-actions"><span className="status-dot" aria-live="polite">{status}</span>
-              {!providerActivity.active && <><button className="secondary-button" onClick={() => setProviderActivity(null)}>Edit inputs</button><button className="primary-button" onClick={() => void generate()}>Retry generation</button></>}
+              {!providerActivity.active && <><button className="secondary-button" onClick={() => setProviderActivity(null)}>Edit inputs</button><button className="primary-button" disabled={!csvInputsConfirmed} onClick={() => void generate(generationJob?.id ?? null)}>Retry with current inputs</button></>}
             </div>
           </section>
           <ProviderActivityPanel activity={providerActivity}
             onCancel={generationJob?.status === 'queued' || generationJob?.status === 'running' ? () => void cancelGeneration() : undefined}
-            onRetry={providerActivity.kind === 'generation' && !providerActivity.active ? () => void generate() : undefined} />
+            onRetry={providerActivity.kind === 'generation' && !providerActivity.active && csvInputsConfirmed ? () => void generate(generationJob?.id ?? null) : undefined} />
         </> : !project || !project.draft ? <section className="panel intake-card">
           <div className="section-heading"><div><h2>{project ? 'Refine the intake before generation' : 'Start with what you know'}</h2><p>Incomplete requirements are expected. Save the model without contacting the configured provider, then generate when it is ready.</p></div><span className="status-dot" aria-live="polite">{status}</span></div>
           <label>Model name<input aria-label="Model name" value={intake.title} onChange={event => setIntake({ ...intake, title: event.target.value })} placeholder="e.g. Claim Payment" /></label>
@@ -1159,12 +1317,27 @@ export function ModelWorkbench() {
                 setProjectProviderDirty(true);
               }} />}</label>
           </div>}
-          <label className="file-drop"><span className="file-drop-title"><Icon name="plus" />Add source files</span><input aria-label="Source files" type="file" multiple accept=".md,.txt,.sql,.ddl,.json" onChange={event => void filesSelected(event.target.files)} />
-            <span>Markdown, text, SQL, DDL or JSON · treated as inert text</span></label>
+          <label className="file-drop"><span className="file-drop-title"><Icon name="plus" />Add source files</span><input aria-label="Source files" type="file" multiple accept=".md,.txt,.sql,.ddl,.json,.csv" onChange={event => void filesSelected(event.target.files)} />
+            <span>Markdown, text, SQL, DDL, JSON or CSV · treated as inert data</span></label>
           {intake.sources.length > 0 && <ul className="source-list">{intake.sources.map((source, index) => <li key={`${source.name}-${index}`}><span className="source-name">{source.name}<small>{source.kind}</small></span><button className="icon-button destructive" aria-label={`Remove source ${source.name}`} onClick={() => setIntake(current => ({ ...current, sources: current.sources.filter((_, candidate) => candidate !== index) }))}><Icon name="trash" /></button></li>)}</ul>}
+          {intake.sources.map((source, index) => source.kind === 'csv' && <CsvReview key={`csv-${source.name}-${index}`} source={source} disabled={busy}
+            onHeadersChange={headers => setIntake(current => ({ ...current, sources: current.sources.map((candidate, candidateIndex) =>
+              candidateIndex === index && candidate.csvAnalysis
+                ? { ...candidate, csvAnalysis: { ...candidate.csvAnalysis, headers, confirmed: false, confirmedAt: null } }
+                : candidate) }))}
+            onHeaderModeChange={mode => void analyseCsvSource(index, { headerMode: mode }, false)}
+            onSensitiveChange={(columnIndex, sensitive) => {
+              const columns = new Set(source.csvAnalysis?.additionalSensitiveColumns ?? []);
+              if (sensitive) columns.add(columnIndex); else columns.delete(columnIndex);
+              void analyseCsvSource(index, { additionalSensitiveColumns: [...columns] }, false);
+            }}
+            onConfirm={() => void analyseCsvSource(index, {}, true)}
+            onReanalyse={() => void analyseCsvSource(index)} />)}
           <div className="intake-actions">
-            <button className="secondary-button" disabled={busy || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void saveIntake()}>{project ? 'Save changes' : 'Save model'}</button>
-            <button className="primary-button" disabled={busy || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void generate()}>Generate draft <Icon name="arrow" /></button>
+            <button className="secondary-button" disabled={busy || !csvInputsAnalysed || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void saveIntake()}>{project ? 'Save changes' : 'Save model'}</button>
+            <button className="primary-button" disabled={busy || !csvInputsConfirmed || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void generate(retryOriginId)}>
+              {retryOriginId ? 'Retry with current inputs' : 'Generate draft'} <Icon name="arrow" />
+            </button>
             {project && <button className="danger-button" disabled={busy} onClick={() => void removeProject()}>Delete model</button>}
             <span>Save makes no provider call. Generate sends the current intake to the configured provider.</span>
           </div>
@@ -1175,7 +1348,7 @@ export function ModelWorkbench() {
 
           {providerActivity && <ProviderActivityPanel activity={providerActivity}
             onCancel={generationJob?.status === 'queued' || generationJob?.status === 'running' ? () => void cancelGeneration() : undefined}
-            onRetry={providerActivity.kind === 'generation' && !providerActivity.active ? () => void generate() : undefined} />}
+            onRetry={providerActivity.kind === 'generation' && !providerActivity.active && csvInputsConfirmed ? () => void generate(generationJob?.id ?? null) : undefined} />}
 
           <div className="model-collaboration-grid">
             <button className={`chat-bubble${chatOpen ? ' open' : ''}`} ref={chatBubble} type="button" aria-label={chatOpen ? 'Close model assistant' : project.draft.clarificationQuestions[0] ? 'Open model assistant, one clarification available' : 'Open model assistant'} aria-expanded={chatOpen} aria-controls="model-assistant-panel" onClick={() => setChatOpen(open => !open)}>
@@ -1198,7 +1371,7 @@ export function ModelWorkbench() {
                     <button className="toolbar-button" type="button" aria-label="Export Mermaid diagram and model details to PDF" disabled={Boolean(modelExportBusy) || !mermaidExportReady} onClick={() => void exportModel()}><Icon name="download" />{modelExportBusy === 'pdf' ? 'Exporting…' : 'Export PDF'}</button>
                   </div>
                   <div className="toolbar-group model-actions">
-                    <button className="toolbar-button" disabled={busy} onClick={() => void generate()}>{generationInputsDirty ? 'Regenerate with changes' : 'Regenerate'}</button>
+                    <button className="toolbar-button" disabled={busy || !csvInputsConfirmed} onClick={() => void generate()}>{generationInputsDirty ? 'Regenerate with changes' : 'Regenerate'}</button>
                     <button className="toolbar-button primary" disabled={busy} onClick={() => void saveVersion()}>Save version</button>
                     <button className="toolbar-button destructive" aria-label="Delete model" disabled={busy} onClick={() => void removeProject()}>Delete</button>
                   </div>
@@ -1223,7 +1396,7 @@ export function ModelWorkbench() {
                 </>}
               </ol>
               <label>{project.draft.clarificationQuestions[0] ? 'Answer or request a change' : 'Message'}<textarea aria-label="Message the model assistant" value={chatMessage} maxLength={4000} rows={3} onChange={event => setChatMessage(event.target.value)} placeholder={project.draft.clarificationQuestions[0] ? 'Answer the question or describe another change…' : 'Describe the change you want…'} /></label>
-              <div className="chat-actions"><small>Your message, persistent instructions, current model and source context are sent to the configured provider.</small><button className="primary-button" disabled={busy || Boolean(pendingChatMessage) || !chatMessage.trim()} onClick={() => void sendChatMessage()}>Send message <Icon name="arrow" /></button></div>
+              <div className="chat-actions"><small>Your message, persistent instructions, current model and source context are sent to the configured provider.</small><button className="primary-button" disabled={busy || !csvInputsConfirmed || Boolean(pendingChatMessage) || !chatMessage.trim()} onClick={() => void sendChatMessage()}>Send message <Icon name="arrow" /></button></div>
             </section>}
           </div>
 
@@ -1256,8 +1429,8 @@ export function ModelWorkbench() {
                   }} /></label>}
                 </div>
                 <label>Persistent model requirements<textarea aria-label="Persistent model instructions" disabled={generationLocked} value={intake.requirements} maxLength={20_000} rows={7} onChange={event => setIntake({ ...intake, requirements: event.target.value })} /></label>
-                <div className="attachment-heading"><div><strong>Source attachments</strong><span>Edit the text that will be sent with the next request.</span></div>
-                  <label className="compact-file-button">Add files<input aria-label="Add generation source files" disabled={generationLocked} type="file" multiple accept=".md,.txt,.sql,.ddl,.json" onChange={event => void filesSelected(event.target.files)} /></label>
+                <div className="attachment-heading"><div><strong>Source attachments</strong><span>CSV files are profiled and masked before provider use.</span></div>
+                  <label className="compact-file-button">Add files<input aria-label="Add generation source files" disabled={generationLocked} type="file" multiple accept=".md,.txt,.sql,.ddl,.json,.csv" onChange={event => void filesSelected(event.target.files)} /></label>
                 </div>
                 <div className="attachment-editors">{intake.sources.length ? intake.sources.map((source, index) => <article className="attachment-editor" key={`${source.name}-${index}`}>
                   <div><strong>{source.name}</strong><span>{source.kind}</span><button className="icon-button destructive" disabled={generationLocked} type="button" aria-label={`Remove source ${source.name}`} onClick={() => setIntake(current => ({
@@ -1265,10 +1438,33 @@ export function ModelWorkbench() {
                   }))}><Icon name="trash" /></button></div>
                   <textarea aria-label={`Source content ${source.name}`} disabled={generationLocked} value={source.content} rows={8} onChange={event => setIntake(current => ({
                     ...current,
-                    sources: current.sources.map((item, candidate) => candidate === index ? { ...item, content: event.target.value } : item),
+                    sources: current.sources.map((item, candidate) => candidate === index
+                      ? {
+                        ...item,
+                        content: event.target.value,
+                        ...(item.kind === 'csv' ? {
+                          csvAnalysis: item.csvAnalysis
+                            ? { ...item.csvAnalysis, contentDigest: '', confirmed: false, confirmedAt: null }
+                            : null,
+                        } : {}),
+                      }
+                      : item),
                   }))} />
+                  {source.kind === 'csv' && <CsvReview source={source} disabled={generationLocked}
+                    onHeadersChange={headers => setIntake(current => ({ ...current, sources: current.sources.map((candidate, candidateIndex) =>
+                      candidateIndex === index && candidate.csvAnalysis
+                        ? { ...candidate, csvAnalysis: { ...candidate.csvAnalysis, headers, confirmed: false, confirmedAt: null } }
+                        : candidate) }))}
+                    onHeaderModeChange={mode => void analyseCsvSource(index, { headerMode: mode }, false)}
+                    onSensitiveChange={(columnIndex, sensitive) => {
+                      const columns = new Set(source.csvAnalysis?.additionalSensitiveColumns ?? []);
+                      if (sensitive) columns.add(columnIndex); else columns.delete(columnIndex);
+                      void analyseCsvSource(index, { additionalSensitiveColumns: [...columns] }, false);
+                    }}
+                    onConfirm={() => void analyseCsvSource(index, {}, true)}
+                    onReanalyse={() => void analyseCsvSource(index)} />}
                 </article>) : <p className="empty-copy">No source attachments. Requirements alone will be sent.</p>}</div>
-                <div className="model-instructions-actions"><p>Saving these inputs makes no provider call. Every new job snapshots them for audit and retry.</p><button className="secondary-button" disabled={busy || !generationInputsDirty || !intake.requirements.trim()} onClick={() => void saveGenerationInputs()}>{generationInputsDirty ? 'Save generation inputs' : 'Generation inputs saved'}</button></div>
+                <div className="model-instructions-actions"><p>Saving these inputs makes no provider call. Every new job snapshots them for audit and retry.</p><button className="secondary-button" disabled={busy || !csvInputsAnalysed || !generationInputsDirty || !intake.requirements.trim()} onClick={() => void saveGenerationInputs()}>{generationInputsDirty ? 'Save generation inputs' : 'Generation inputs saved'}</button></div>
               </div>
             </details>
             <div className="model-fields">
