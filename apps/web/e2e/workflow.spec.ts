@@ -5,7 +5,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   let generationCount = 0;
   let created = false;
   let firstChatRequirements = '';
-  let providerSettings = { baseUrl: 'https://api.openai.com/v1', model: 'environment-model', apiKeyConfigured: true };
+  let providerSettings = { baseUrl: 'https://api.openai.com/v1', model: 'environment-model', providerType: 'openai' as const, apiKeyConfigured: true };
   const longClarificationQuestion = [
     'Should an external payment reference be unique?',
     ...Array.from({ length: 11 }, (_, index) => `Clarification context ${index + 1}: confirm the platform boundary.`),
@@ -36,6 +36,7 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     draft: null as typeof generatedClaimPayment | null,
     versions: [] as Array<{ id: string; versionNumber: number; createdAt: string }>,
     messages: [] as Array<{ id: string; role: 'user' | 'assistant'; content: string; createdAt: string }>,
+    providerSettings: { providerType: 'openai' as const, baseUrl: 'https://api.openai.com/v1', model: 'environment-model' },
   };
 
   await page.route('**/api/projects**', async route => {
@@ -47,6 +48,11 @@ test('Michal can generate, refine, preview and version a claim payment model', a
       status,
       contentType: 'application/json',
       body: JSON.stringify(body),
+    });
+    const ndjson = (events: unknown[]) => route.fulfill({
+      status: 200,
+      contentType: 'application/x-ndjson',
+      body: `${events.map(event => JSON.stringify(event)).join('\n')}\n`,
     });
 
     if (path === '/api/projects' && method === 'GET') return json(created ? [{
@@ -67,13 +73,19 @@ test('Michal can generate, refine, preview and version a claim payment model', a
       Object.assign(project, { title: input.title, requirements: input.requirements });
       return json(project);
     }
-    if (path.endsWith('/generate') && method === 'POST') {
+    if (path.endsWith('/generation-jobs') && method === 'POST') {
       generationCount += 1;
       project.draft = generationCount === 1
         ? { ...structuredClone(generatedClaimPayment), warnings: ['Confirm whether external payment references must be unique.'], clarificationQuestions: [longClarificationQuestion] }
         : structuredClone(generatedClaimPayment);
-      return json(project);
+      return json({
+        id: `job-${generationCount}`, projectId: project.id, status: 'completed',
+        providerSettings: project.providerSettings, phase: 'completed', message: 'Draft ready.', transcript: '{"model":',
+        error: null, createdAt: '2026-09-22T00:00:00Z', startedAt: '2026-09-22T00:00:01Z',
+        heartbeatAt: '2026-09-22T00:00:02Z', completedAt: '2026-09-22T00:00:03Z', updatedAt: '2026-09-22T00:00:03Z',
+      }, 202);
     }
+    if (path.endsWith('/generation-jobs') && method === 'GET') return route.fulfill({ status: 204 });
     if (path.endsWith('/draft') && method === 'PUT') {
       project.draft = request.postDataJSON() as typeof generatedClaimPayment;
       return json(project.draft);
@@ -98,7 +110,10 @@ test('Michal can generate, refine, preview and version a claim payment model', a
           ? 'I applied the uniqueness requirement and cleared the question.'
           : longAssistantReply, createdAt: '2026-09-22T00:02:01Z' },
       ];
-      return json(project);
+      return ndjson([
+        { type: 'progress', progress: { phase: 'generating', message: 'Updating the model…' } },
+        { type: 'result', project },
+      ]);
     }
     if (path.endsWith('/versions') && method === 'POST') {
       project.versions = [{ id: 'version-1', versionNumber: 1, createdAt: '2026-09-22T00:01:00Z' }];
@@ -126,6 +141,11 @@ test('Michal can generate, refine, preview and version a claim payment model', a
     }
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(providerSettings) });
   });
+  await page.route('**/api/settings/provider/models**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ id: providerSettings.model, name: providerSettings.model }]),
+  }));
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Turn complex requirements/u })).toBeVisible();
@@ -152,6 +172,14 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await page.getByRole('button', { name: /Generate draft/u }).click();
 
   await expect(page.getByRole('heading', { name: 'Claim Payment model' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Model chat' })).toHaveCount(0);
+  await page.getByRole('button', { name: /Open model assistant/u }).click();
+  await expect(page.getByRole('region', { name: 'Model chat' })).toBeVisible();
+  const assumptionsCard = page.locator('details.assumptions-card');
+  const warningsCard = page.locator('details.warnings-card');
+  await expect(assumptionsCard).not.toHaveAttribute('open', '');
+  await expect(warningsCard).not.toHaveAttribute('open', '');
+  await assumptionsCard.locator('summary').click();
   await expect(page.getByText('A claim uses one currency for approval and payments.')).toBeVisible();
   await expect(page.getByText(/Should an external payment reference be unique\?/u)).toBeVisible();
   await expect(page.locator('.mermaid-preview svg')).toBeVisible();
@@ -184,13 +212,25 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   await expect(canvasContent).toHaveAttribute('data-scale', '0.5');
   await expect(canvasContent).toHaveAttribute('data-offset-x', '0');
   await expect(canvasContent).toHaveAttribute('data-offset-y', '0');
+  const mermaidSvg = page.locator('.mermaid-preview svg');
+  expect(await mermaidSvg.getAttribute('width')).not.toBe('100%');
+  expect(await canvasContent.evaluate(element => getComputedStyle(element).willChange)).toBe('auto');
+  const widthAtFifty = (await mermaidSvg.boundingBox())!.width;
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await expect(canvasContent).toHaveAttribute('data-scale', '1');
+  await expect.poll(async () => (await mermaidSvg.boundingBox())!.width).toBeCloseTo(widthAtFifty * 2, -1);
+  await page.getByRole('button', { name: 'Reset model view' }).click();
   const entityEditors = page.locator('details.entity-editor');
+  const entitiesEditor = page.locator('details.entities-editor');
+  await expect(entitiesEditor).not.toHaveAttribute('open', '');
   await expect(entityEditors).toHaveCount(2);
   await expect(entityEditors.nth(0)).not.toHaveAttribute('open', '');
   await expect(entityEditors.nth(1)).not.toHaveAttribute('open', '');
   await expect(page.locator('details.relationship-editor')).not.toHaveAttribute('open', '');
   await expect(page.locator('details.rule-editor')).not.toHaveAttribute('open', '');
   await expect(page.locator('details.history-card')).not.toHaveAttribute('open', '');
+  await entitiesEditor.locator('summary').first().click();
   await entityEditors.nth(0).locator('summary').click();
   await expect(page.getByLabel('Entity name Claim')).toBeVisible();
 
@@ -201,8 +241,9 @@ test('Michal can generate, refine, preview and version a claim payment model', a
   const chatBox = await chat.boundingBox();
   const editorBox = await editor.boundingBox();
   const reviewBox = await review.boundingBox();
-  expect(outputBox && chatBox && outputBox.x + outputBox.width <= chatBox.x + 1).toBeTruthy();
-  expect(outputBox && chatBox && editorBox && editorBox.y >= Math.max(outputBox.y + outputBox.height, chatBox.y + chatBox.height) - 1).toBeTruthy();
+  expect(outputBox && chatBox && chatBox.x >= outputBox.x && chatBox.x + chatBox.width <= outputBox.x + outputBox.width + 1).toBeTruthy();
+  expect(outputBox && chatBox && chatBox.y >= outputBox.y).toBeTruthy();
+  expect(outputBox && editorBox && editorBox.y >= outputBox.y + outputBox.height - 1).toBeTruthy();
   expect(editorBox && reviewBox && reviewBox.y >= editorBox.y + editorBox.height - 1).toBeTruthy();
 
   const clarificationMessage = page.locator('.chat-message.clarification-prompt');
