@@ -393,7 +393,9 @@ describe('Michal modelling workflow', () => {
     await user.type(screen.getByLabelText('Message the model assistant'), 'Yes, within the payment platform.');
     await user.click(screen.getByRole('button', { name: 'Send message' }));
     expect(await screen.findByText('I applied the uniqueness requirement and cleared the question.')).toBeTruthy();
-    const instructionSave = calls.find(call => call.url === '/api/projects/project-1' && call.method === 'PUT');
+    const instructionSave = calls.find(call => call.url === '/api/projects/project-1'
+      && call.method === 'PUT'
+      && (call.body as { requirements?: string })?.requirements === 'Model claim payments and keep an auditable payment history.');
     const chatCall = calls.find(call => call.url.endsWith('/chat'));
     expect((instructionSave?.body as { requirements: string }).requirements).toBe('Model claim payments and keep an auditable payment history.');
     expect(calls.indexOf(instructionSave!)).toBeLessThan(calls.indexOf(chatCall!));
