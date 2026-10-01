@@ -3,11 +3,14 @@
 Canonical source lives under `.governance/`; `tools/` and `.agents/skills/` are native
 entrypoints. Root AGENTS/.gitignore receive marked managed sections; their other bytes
 remain project-owned. No application files, package.json, CI, user settings or hooks
-are overwritten by the installer. Unknown files are not installer-owned.
+are overwritten by the installer. Unknown files are not installer-owned. A pre-existing
+file identical in bytes and mode to the selected release may be adopted; the installer
+records its original copy and restores it on removal, even after an upgrade. A differing
+pre-existing file remains a collision requiring an explicit migration decision.
 
 `docs/initialise-prompt.md` is the copyable Codex entrypoint for an empty project. It
 collects a user-defined project name and GitHub owner, clones the named dev-stack GitHub
-repository into a temporary installation directory, generates the adapter, runs the
+repository at a reviewed release tag into a temporary installation directory, generates the adapter, runs the
 installer lifecycle and then starts guided feature intake.
 The native `dev-stack-project-initialisation` metadata exposes the same workflow as a
 selectable skill. The `ui-ux-pro-max` router is selectable and may be discovered
@@ -15,6 +18,9 @@ implicitly only for visual or interactive UI/UX work; its description expressly 
 backend, API, database, infrastructure and other non-visual tasks. Its local catalog and
 Python scripts are installed under `.governance/skills/ui-ux-pro-max/`, with the reviewed
 upstream version, commit and MIT license recorded alongside them.
+The five portable task skills have matching native routers: search-first, context-handoff,
+api-contract-review, migration-safety and security-review. Select them when their specific
+boundary is in scope; they do not replace the accepted request/design or project policy.
 
 `project.json`: schemaVersion=1, repository=`owner/name`, allowed branchPrefixes.
 `delivery.json`: schemaVersion=1, project, baseBranch, queue (positive issue number or
@@ -66,8 +72,9 @@ is rejected by active commands.
 
 Installer exits 2 for a refusal and retains uncertain state.
 
-The tested host uses Node24.14.0/Python3.12.3/Git2.43.0 and Codex0.149.1. The optional worker
+The local governance checks used Node24.14.0/Python3.12.3/Git2.43.0 and Codex0.154.0. The optional worker
 requires Linux bubblewrap, native pidfd support, strict config and Responses API support.
 It also requires an explicit secret-free worker config and the credential environment
 variable named by that config. Unsupported provider/host capability stays unavailable;
-there is no automatic upgrade, fallback or Desktop mutation.
+there is no automatic upgrade, fallback or Desktop mutation. A live provider call was not
+part of this candidate's local verification.

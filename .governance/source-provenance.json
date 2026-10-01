@@ -1,30 +1,30 @@
 {
-  "status": "local-candidate-not-a-release",
+  "status": "public-v0.1.0-source-snapshot",
   "sources": [
     {
       "source": ".governance/tooling/scripts/pr-test-selection.mjs",
       "sourceSha256": "737617f4887176269a153d528f712fabfbdb214a87bd6730d32d237254e036a9",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54"
+      "sourceRelease": "v0.1.0"
     },
     {
       "source": ".governance/tooling/scripts/dev/governance-cost.mjs",
       "sourceSha256": "83f0b1e395f32ba25fe93e4bd1d1c36dd81ce51862c3588c74f9c1ceadc7fb30",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54"
+      "sourceRelease": "v0.1.0"
     },
     {
       "source": ".governance/tooling/scripts/dev/governance-contracts.mjs",
       "sourceSha256": "0a7cf418c38f91fe70db0ae696a0bbff402a841310bd771256c52f7e15683c60",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54"
+      "sourceRelease": "v0.1.0"
     },
     {
       "source": ".governance/config.json",
       "sourceSha256": "fd3c0a4434bd03dfd750c4bf9adf85fa2c1877520e7fdb52e6dc193c4577065a",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54"
+      "sourceRelease": "v0.1.0"
     },
     {
       "source": ".governance/tooling/scripts/dev/verification-baseline.mjs",
       "sourceSha256": "866f6d90358571786407880ef2dd16f414e4b5eb4a6d175d8e93fbba9e23eb49",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54"
+      "sourceRelease": "v0.1.0"
     }
   ],
   "adaptations": [
@@ -32,5 +32,5 @@
     "Pass validated repository/branch adapter to result source checks; preserve remaining contract behavior",
     "Separate the read-only Git baseline from product runtime; require root AGENTS, reject symlink policy, report optional package commands and project digest; retain incomplete verdict"
   ],
-  "rights": "Project-authored material remains private; publication/licensing review pending"
+  "rights": "Public distribution authorized by the repository owner; MIT and third-party notices retained"
 }

@@ -32,7 +32,7 @@ add stronger external pinning without changing this workflow.
 Open Codex in the directory you want to initialise and paste the
 [empty-project initialisation prompt](initialise-prompt.md). It assumes the directory is
 empty, asks for the project name and GitHub owner one question at a time, clones dev-stack
-from its GitHub repository into a temporary installation directory, and performs steps
+from its GitHub repository at a reviewed release tag into a temporary installation directory, and performs steps
 1–3 below with a generated adapter. After the verified install and local governance
 commit it immediately starts the guided request intake. The selectable
 `$dev-stack-project-initialisation` skill exposes the same workflow when Codex can already
@@ -66,6 +66,7 @@ outside that block remain yours.
 | `.governance/self-verification.json` | Maximum iterations, repeated failures and elapsed time for a loop. | Pinned dev-stack release. |
 | `.governance/docs/initialise-prompt.md` | Copyable Codex prompt for a new or empty project. | Pinned dev-stack release. |
 | `.governance/skills/ui-ux-pro-max/` | Optional, attributed local design intelligence for UI work only. | Pinned third-party skill plus dev-stack routing adaptation. |
+| `.governance/skills/` | Conditional portable skills for search, handoff, API contracts, migration safety and security review, alongside delivery and engineering principles. | Pinned dev-stack release; select only when relevant. |
 
 The request/design pair is the most important feature record: the request says what
 “done” means, while the design says how the system will safely achieve it. A passing
@@ -137,7 +138,7 @@ explicitly unconfigured.
 Run the installer from the reviewed release directory:
 
 ```sh
-RELEASE=/opt/reviewed/dev-stack-0.1.0-candidate.2
+RELEASE=/opt/reviewed/dev-stack-0.1.0
 PROJECT=/work/data-model-agent
 ADAPTER=/work/data-model-agent/dev-stack.adapter.json
 
@@ -168,7 +169,9 @@ upgrade, run `plan` from the new release's installer with the same adapter, then
 The install adds canonical governance files, native skill routers, `tools/governance`,
 an ignored `.governance-artifacts/` area, and marked sections in `AGENTS.md` and
 `.gitignore`. Existing content outside marked sections survives. Conflicting or locally
-modified installer-owned files stop the operation for review.
+modified installer-owned files stop the operation for review. An identical existing file
+can be adopted without rewriting it; its original bytes are restored if the kit is later
+removed. Review every planned update or removal before applying it.
 
 Commit this governance baseline before feature work:
 
@@ -507,6 +510,8 @@ Change the dev-stack source and produce a new pinned release:
 - add a conditional principle by creating
   `.governance/skills/principle-<name>/SKILL.md` and registering its trigger in
   `.governance/principles.md`.
+- add a task-specific reusable skill under `.governance/skills/<name>/SKILL.md` and a
+  narrow `.agents/skills/dev-stack-<name>/SKILL.md` router when native discovery is useful.
 
 Then update the review/test count invariants and `proof.json` where applicable, add any
 new file to the sorted `release-inputs.json`, validate changed skills, run the full test

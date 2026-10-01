@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createReadStream, readFileSync, writeFileSync, realpathSync, lstatSync } from 'node:fs';
-import { resolve, relative, dirname, join } from 'node:path';
+import { resolve, relative, dirname, join, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -8,12 +8,12 @@ import { digest, validateScope } from './scope.mjs';
 import { git, projectFile } from './actions.mjs';
 import { reviewPlan } from './review.mjs';
 import { inspectVerification } from './verification.mjs';
-import { normalizeUsage, snapshotDelta, usageReport } from './cost.mjs';
+import { normalizeUsage, snapshotDelta, usageReport, reasoningEfforts, reviewSettings } from './cost.mjs';
 
 const keys = (value, names) => assert.deepEqual(Object.keys(value).sort(), names.slice().sort());
 const json = (root, path) => JSON.parse(readFileSync(projectFile(root, path), 'utf8'));
 export function artifact(root, path, value) {
-  const target = resolve(root, path), rel = relative(root, target), data = JSON.stringify(value, null, 2) + '\n';
+  const target = resolve(root, path), rel = relative(root, target).split(sep).join('/'), data = JSON.stringify(value, null, 2) + '\n';
   assert.ok(rel.startsWith('.governance-artifacts/') && realpathSync(dirname(target)) === dirname(target), 'unsafe-artifact-path');
   git(root, 'check-ignore', '--quiet', '--', rel);
   writeFileSync(target, data, { flag: 'wx', mode: 0o600 }); // No replacement of a previous run or symlink.
@@ -75,13 +75,12 @@ function sourceText(root, head, path) {
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000, maxBuffer: 1000000 }));
 }
 export function reviewBundle(ctx, scope, values, request, execute = spawnSync) {
-  keys(request, ['context', 'principles', 'checks', 'ledger', 'reasoning']);
+  keys(request, ['context', 'principles', 'checks', 'reasoning', ...(Object.hasOwn(request, 'ledger') ? ['ledger'] : [])]);
   keys(request.reasoning, ['effort', 'reason']);
-  assert.ok(['medium', 'high'].includes(request.reasoning.effort));
-  if (request.reasoning.effort === 'high') assert.ok(typeof request.reasoning.reason === 'string' && request.reasoning.reason.trim().length >= 20, 'high-requires-concrete-reason');
-  else assert.equal(request.reasoning.reason, null);
+  assert.ok(reasoningEfforts.includes(request.reasoning.effort));
+  assert.ok(request.reasoning.reason === null || typeof request.reasoning.reason === 'string');
   const plan = reviewPlan({ cwd: ctx.root, scope, head: values.head, reviewBase: values.base, stagingBase: values.staging, delivery: ctx.delivery });
-  const costs = usageReport(scope, json(ctx.root, request.ledger));
+  const costs = request.ledger == null ? null : usageReport(scope, json(ctx.root, request.ledger));
   assert.equal(plan.staging.binaryFiles, 0, 'binary-needs-explicit-review-outside-text-bundle');
   const paths = new Set([...ctx.delivery.instructionPaths, ...request.context]);
   for (const id of request.principles) {
@@ -93,7 +92,7 @@ export function reviewBundle(ctx, scope, values, request, execute = spawnSync) {
     sourceText(ctx.root, ref, row.path);
   }
   const patches = Object.fromEntries([...new Set([values.base, values.staging])].map(base => [base, safeText(git(ctx.root, 'diff', '--no-ext-diff', '--no-textconv', '--no-renames', `${base}...${values.head}`) + '\n')]));
-  const packet = { version: 1, scope, plan, context, patches, reasoning: { ...request.reasoning, verbosity: 'low', appliedToDesktop: false }, costs };
+  const packet = { version: 1, scope, plan, context, patches, reasoning: { ...request.reasoning, verbosity: reviewSettings(ctx.config).verbosity, appliedToDesktop: false }, costs };
   assert.ok(Buffer.byteLength(JSON.stringify(packet)) <= 1000000, 'bundle-too-large-split-scope-or-review-explicitly');
   const config = inspectVerification(JSON.parse(sourceText(ctx.root, values.head, ".governance/verification.json")));
   const checkCommands = Object.fromEntries(Object.entries(config.commands).map(([name, argv]) => [name, [argv[0], argv.slice(1)]]));

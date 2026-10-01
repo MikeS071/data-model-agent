@@ -109,16 +109,16 @@ export function parseDesignDocument(markdown) {
 
 function document(root, path, expected) {
   if (path !== expected) fail('DOCUMENT_PATH_INVALID');
-  const full = resolve(root, path), rel = relative(root, full);
+  const full = resolve(root, path), rel = relative(root, full), gitPath = rel.split(sep).join('/');
   if (!rel || rel === '..' || rel.startsWith(`..${sep}`)) fail('DOCUMENT_PATH_INVALID');
   const stat = lstatSync(full);
   if (stat.isSymbolicLink() || !stat.isFile() || stat.size > 200000 || realpathSync(full) !== full) fail('DOCUMENT_PATH_INVALID');
-  const tracked = spawnSync('git', ['--no-optional-locks', '-C', root, 'ls-files', '--error-unmatch', '--', rel], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  const clean = spawnSync('git', ['--no-optional-locks', '-C', root, 'diff', '--quiet', 'HEAD', '--', rel], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const tracked = spawnSync('git', ['--no-optional-locks', '-C', root, 'ls-files', '--error-unmatch', '--', gitPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const clean = spawnSync('git', ['--no-optional-locks', '-C', root, 'diff', '--quiet', 'HEAD', '--', gitPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   if (tracked.status !== 0 || clean.status !== 0) fail('DOCUMENT_NOT_COMMITTED');
   const bytes = readFileSync(full, 'utf8');
   let committed;
-  try { committed = execFileSync('git', ['--no-optional-locks', '-C', root, 'show', `HEAD:${rel}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
+  try { committed = execFileSync('git', ['--no-optional-locks', '-C', root, 'show', `HEAD:${gitPath}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
   catch { fail('DOCUMENT_NOT_COMMITTED'); }
   if (committed !== bytes) fail('DOCUMENT_NOT_COMMITTED');
   return bytes;

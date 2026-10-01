@@ -2,142 +2,142 @@
   "sources": [
     {
       "source": ".governance/tooling/scripts/dev/governance-review.mjs",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "8db0d609304e94b9890377f257df220517eb868548fa0927adbed31a38cb6a9e"
     },
     {
       "source": "AGENTS.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "73fb613649753e86a4ca014c9aebd66dc313c3f76153b5c640f7b84f58ad48a1"
     },
     {
       "source": "product governance plan",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "02df337d587ce3c02e0f4903e6548bd8808df9c729e82665805a10a28d3c2023"
     },
     {
       "source": ".governance/principles.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "1def60b270b1a9edd1194976e57204b6e2158c7f5d3b6cbe59bc0cb55789ae9a"
     },
     {
       "source": ".governance/LICENSE.third-party",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "bc957ca6bee02792566a1a028d105e02e247c6e77cf057061674273da77b200e"
     },
     {
       "source": ".governance/skills/principle-laziness-protocol/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "0885f75bc51ee15ee998485e741a52801978ea8c9e440f961ca4350a28dddeb6"
     },
     {
       "source": ".governance/skills/principle-foundational-thinking/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "81e7060a24a30c4df8e92157ca3c390cc7a49a974c354e419c89ad5524f11a1a"
     },
     {
       "source": ".governance/skills/principle-redesign-from-first-principles/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "5f64d6b5e06ab9482614b567967c2b1fcf7f812c96fdd0a4a05cd716498bd270"
     },
     {
       "source": ".governance/skills/principle-attack-the-premise/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "0a39d54105d4d6ae445d0b1a01502208a6b1009c77d640da13f32753de17fbe5"
     },
     {
       "source": ".governance/skills/principle-subtract-before-you-add/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "79570adb34d6aa8e13b0701854a50b1ab5f0aeb683c7c354a33e7f7bee58527e"
     },
     {
       "source": ".governance/skills/principle-minimize-reader-load/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "08721e73c3881002bed06498371c6fe6068c992cc1c56707e3014423e45381b3"
     },
     {
       "source": ".governance/skills/principle-outcome-oriented-execution/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "a0a9a41ae855bdc658e4b31eef0bbea095bde907bd1daff3f6c9ffccb5211c52"
     },
     {
       "source": ".governance/skills/principle-experience-first/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "574db74c2591f4e7b0dd73a77c6a6fad809f69e88c0106ddac007578c491a226"
     },
     {
       "source": ".governance/skills/principle-exhaust-the-design-space/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "0772318f06edc2e0aa2370156b46c073c761e13f03bf90f048fa1692f6e82384"
     },
     {
       "source": ".governance/skills/principle-build-the-lever/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "c60d2e104409e5b13d49ce67178c456efb4cf98f55697a4358702a5935121ecd"
     },
     {
       "source": ".governance/skills/principle-model-the-domain/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "cabbb5dc3eaeab900a5fd484b414326a9ab5f6a206f0082107bd8195c49af588"
     },
     {
       "source": ".governance/skills/principle-boundary-discipline/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "8f2499c0c0c406da6642c5abc5651eba041d7d1c4fd1339f534e7997da90ad5a"
     },
     {
       "source": ".governance/skills/principle-type-system-discipline/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "443057687fd3d4e7045c86d82e9e72a891e26fafbfe1c65be64afaf9050c15f0"
     },
     {
       "source": ".governance/skills/principle-make-operations-idempotent/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "658f72fa8e990be44de09409a6246cf4c49e6c24471ccce6a3b2872e4c5f8941"
     },
     {
       "source": ".governance/skills/principle-migrate-callers-then-delete-legacy-apis/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "ad178c6e71a402238a25f7ec6e6f5d1fc6e20e32fa853d733da296cf10e777cf"
     },
     {
       "source": ".governance/skills/principle-separate-before-serializing-shared-state/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "1fc248d81351433921b71d247b9f1dda299b9133de1d9c0a78dd0dce84bfb8d8"
     },
     {
       "source": ".governance/skills/principle-prove-it-works/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "d58ad109871af8f22b8cb3886ecc14075c7f26d2859a1a29dded5ad04b809b5a"
     },
     {
       "source": ".governance/skills/principle-fix-root-causes/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "37332a57428ccd3d2004ea5ad2bcc62907c502da66b8eb1458b98061c869ec0e"
     },
     {
       "source": ".governance/skills/principle-sequence-verifiable-units/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "4f2f2ce732793848a206b80e7d0cf299858f9222fc7c6122839f112ba11902ca"
     },
     {
       "source": ".governance/skills/principle-test-behavior-not-implementation/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "b1ee5536a7cb20aecf792ece19bb90859403225460b4b6ae12846adce24cff28"
     },
     {
       "source": ".governance/skills/principle-guard-the-context-window/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "248b7d18a8da0293a1751df889c4597ec309eed76387be9aed0cd485390aacd4"
     },
     {
       "source": ".governance/skills/principle-never-block-on-the-human/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "2561cfea8d170338c08cccfdacef4e422c42619b34ff5c83d63e950ef5c1bc7c"
     },
     {
       "source": ".governance/skills/principle-encode-lessons-in-structure/SKILL.md",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "17e715f6646d7115757afd61057fdda5bdd8b9dbc890ce25a7ebd775fb2bb29e"
     }
   ],

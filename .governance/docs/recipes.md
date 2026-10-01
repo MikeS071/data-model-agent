@@ -22,7 +22,7 @@ usage evidence in ignored `.governance-artifacts/`; retain no secrets or private
    failure bounds. Only `SCOPE_VERIFIED` can return `report`.
 5. Optionally build a compact `review bundle` with the complete diff, selected full
    principle leaves, criterion/check mapping, independently assessed evidence and
-   complete measured usage. High reasoning requires a concrete reason; no review
+   complete measured usage when available. Record why a materially higher review effort was chosen; no review
    token/dollar budget is enforced. `usage snapshot`, `usage collect` and `usage report`
    distinguish actual counts from unknowns. Recorded prices are not a live quote.
 6. Reconcile issue/parent/queue. Obtain exact PR/target approval before any merge.
@@ -32,7 +32,8 @@ Upgrade invokes `plan` from the new release and then `apply --target PROJECT`; t
 pending plan binds the exact release and adapter automatically. A local modification
 blocks overwrite. `remove --target PROJECT` records a readable pending removal plan;
 `apply --target PROJECT` removes owned files and exact managed sections after review.
-User additions outside sections survive.
+User additions outside sections survive. Identical files that existed before installation
+are restored on removal, including after an intervening upgrade.
 Rollback explicitly restores the previous transaction; conflicts stop before overwrite.
 An interrupted apply keeps its private transaction. `recover --target PROJECT` resumes
 only if every file still matches either its recorded before or after bytes. Verify after

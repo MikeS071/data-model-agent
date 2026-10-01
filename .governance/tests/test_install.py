@@ -39,7 +39,7 @@ class LifecycleTests(unittest.TestCase):
         for row in manifest['files']:
             dest=package/row['path'];dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/row['path'],dest)
         p=package/'.governance/policy.md';p.write_text(p.read_text()+'\nReviewed release revision.\n')
-        manifest['version']='0.1.0-candidate.3'
+        manifest['version']='0.1.1-candidate.1'
         for row in manifest['files']:row['sha256']=hashlib.sha256((package/row['path']).read_bytes()).hexdigest()
         raw=(json.dumps(manifest,indent=2)+'\n').encode();(package/'.governance/release.json').write_bytes(raw)
         return package
@@ -74,15 +74,15 @@ class LifecycleTests(unittest.TestCase):
                 with (self.target/'AGENTS.md').open('ab') as f:f.write(b'\nAdditional user rule.\n')
                 (self.target/'notes.txt').write_text('user-owned')
                 package=self.upgraded();self.assertEqual(self.install(package)['state'],'applied')
-                self.assertEqual(self.cli('verify')['version'],'0.1.0-candidate.3')
-                self.assertEqual(self.cli('rollback')['version'],'0.1.0-candidate.2')
+                self.assertEqual(self.cli('verify')['version'],'0.1.1-candidate.1')
+                self.assertEqual(self.cli('rollback')['version'],'0.1.0')
                 self.cli('verify')
                 self.cli('remove');self.cli('apply')
                 self.assertEqual((self.target/'AGENTS.md').read_bytes(),policy+b'\nAdditional user rule.\n')
                 self.assertEqual((self.target/'notes.txt').read_text(),'user-owned')
                 self.assertFalse((self.target/'tools/governance').exists())
                 self.assertTrue((self.target/'.git').is_dir())
-                self.assertEqual(self.cli('rollback')['version'],'0.1.0-candidate.2')
+                self.assertEqual(self.cli('rollback')['version'],'0.1.0')
                 self.cli('verify')
                 self.assertTrue((self.target/'AGENTS.md').read_bytes().startswith(policy))
                 self.assertTrue((self.target/'AGENTS.md').read_bytes().endswith(b'\nAdditional user rule.\n'))
@@ -104,6 +104,19 @@ class LifecycleTests(unittest.TestCase):
         (self.target/'tools').mkdir();(self.target/'tools/governance').write_text('user tool')
         self.assertEqual(self.cli('plan',*self.inputs(),ok=False)['error'],'unowned-conflict:tools/governance')
         self.assertFalse((self.target/'AGENTS.md').exists())
+    def test_archive_permissions_are_canonicalised_without_losing_integrity(self):
+        package=self.home/'archive';package.mkdir()
+        manifest=json.loads((ROOT/'.governance/release.json').read_text())
+        for row in manifest['files']:
+            dest=package/row['path'];dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/row['path'],dest)
+            dest.chmod(0o775 if row['mode']==0o755 else 0o664)
+        shutil.copy2(ROOT/'.governance/release.json',package/'.governance/release.json')
+        self.assertEqual(self.install(package)['state'],'applied')
+        policy=self.target/'.governance/policy.md'
+        self.assertEqual(policy.stat().st_mode & 0o777,0o644)
+        package_policy=package/'.governance/policy.md'
+        package_policy.chmod(0o775)
+        self.assertEqual(self.cli('plan',*self.inputs(package),ok=False)['error'],'release-file-mismatch:.governance/policy.md')
     def test_changed_owned_file_and_duplicate_skill_are_preserved(self):
         self.install();p=self.target/'.governance/policy.md';p.write_text(p.read_text()+'local change')
         self.assertEqual(self.cli('plan',*self.inputs(),ok=False)['error'],'locally-modified:.governance/policy.md')
@@ -111,6 +124,19 @@ class LifecycleTests(unittest.TestCase):
         p.write_bytes((ROOT/'.governance/policy.md').read_bytes())
         duplicate=self.target/'.agents/skills/unrelated/SKILL.md';duplicate.parent.mkdir(parents=True);duplicate.write_text('---\nname: dev-stack-delivery\n---\n')
         self.assertIn('duplicate-skill',self.cli('plan',*self.inputs(),ok=False)['error'])
+    def test_identical_existing_file_is_adopted_and_restored_on_remove(self):
+        path=self.target/'.governance/policy.md';path.parent.mkdir();original=(ROOT/'.governance/policy.md').read_bytes();path.write_bytes(original);path.chmod(0o644)
+        self.assertEqual(self.install()['state'],'applied')
+        self.assertEqual(i.state(self.target)['owned']['.governance/policy.md']['kind'],'adopted')
+        self.assertEqual(self.cli('verify')['state'],'installed-files-verified')
+        upgraded=self.upgraded();self.assertEqual(self.install(upgraded)['state'],'applied')
+        self.assertNotEqual(path.read_bytes(),original)
+        self.cli('remove');self.assertEqual(self.cli('apply')['state'],'applied')
+        self.assertEqual(path.read_bytes(),original)
+        self.assertFalse((self.target/'tools/governance').exists())
+        self.assertEqual(self.cli('rollback')['version'],'0.1.1-candidate.1')
+        self.assertEqual(path.read_bytes(),(upgraded/'.governance/policy.md').read_bytes())
+        self.assertEqual(self.cli('verify')['state'],'installed-files-verified')
     def test_partial_apply_recovers_and_stale_plan_cannot_overwrite(self):
         package,manifest,files,observed=i.release(ROOT,self.sha)
         configured,adapter,adapter_digest=i.settings(package,self.adapter);files.update(configured)

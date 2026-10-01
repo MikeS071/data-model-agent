@@ -92,7 +92,12 @@ def release(path, expected=None):
         require(name.startswith(('.governance/', '.agents/skills/', 'tools/')), 'release-ownership-invalid')
         require(row['mode'] in (0o644, 0o755), 'release-mode-invalid')
         p = safe(root, name); data = p.read_bytes()
-        require(digest(data) == row['sha256'] and p.stat().st_mode & 0o777 == row['mode'], 'release-file-mismatch:' + name)
+        # Git archives retain only the executable bit. Extraction umasks can
+        # change read/write bits, so verify bytes and executable identity here;
+        # atomic() applies the reviewed canonical mode in the target project.
+        actual_executable = bool(p.stat().st_mode & 0o100)
+        expected_executable = bool(row['mode'] & 0o100)
+        require(digest(data) == row['sha256'] and actual_executable == expected_executable, 'release-file-mismatch:' + name)
         files[name] = blob(data, row['mode'])
     files['.governance/release.json'] = blob(raw)
     return root, manifest, files, observed
@@ -115,7 +120,7 @@ inspectDelivery(value.delivery); inspectVerification(value.verification);
     files = {'.governance/project.json': blob(encoded(value['delivery']['project'])), '.governance/delivery.json': blob(encoded(value['delivery'])), '.governance/verification.json': blob(encoded(value['verification']))}
     return files, source, observed
 
-AGENTS = '\n<!-- dev-stack:begin -->\nRead `.governance/skills/session-initialisation/SKILL.md` at task entry and `.governance/policy.md` for delivery. Existing stronger local policy and direct user instructions retain precedence. The kit grants no merge, provider, credential or worker activation authority.\n<!-- dev-stack:end -->\n'
+AGENTS = '\n<!-- dev-stack:begin -->\nRead `.governance/skills/session-initialisation/SKILL.md` at task entry and `.governance/policy.md` for delivery. Existing stronger local policy and direct user instructions retain precedence. Native delegation stays within approved scope; the optional external worker requires task-bound activation. Merge, provider, credential and destructive-action gates remain.\n<!-- dev-stack:end -->\n'
 IGNORE = '\n# dev-stack:begin\n/.governance-artifacts/\n/.codex/delegations/\n/.codex/worker-worktrees/\n/.governance/.proof/\n/.governance/**/__pycache__/\n# dev-stack:end\n'
 
 def state(root):
@@ -153,9 +158,19 @@ def prepare(root, files, version, release_digest, removing=False):
             if previous:
                 require(actual == previous['blob'], 'locally-modified:' + name)
             elif actual is not None:
-                require(False, 'unowned-conflict:' + name)
+                require(not removing and actual == files.get(name), 'unowned-conflict:' + name)
             desired = files.get(name)
-            if desired is not None: owned[name] = {'kind': 'file', 'blob': desired}
+            if removing and previous and previous['kind'] == 'adopted':
+                desired = previous['original']
+            if desired is not None and not removing:
+                if previous and previous['kind'] == 'adopted':
+                    owned[name] = {'kind': 'adopted', 'blob': desired, 'original': previous['original']}
+                elif previous:
+                    owned[name] = {'kind': 'file', 'blob': desired}
+                elif actual is not None:
+                    owned[name] = {'kind': 'adopted', 'blob': desired, 'original': actual}
+                else:
+                    owned[name] = {'kind': 'file', 'blob': desired}
         if desired != actual: changes.append({'path': name, 'before': actual, 'after': desired})
     new = {'version': version, 'releaseDigest': release_digest, 'owned': owned}
     unsigned = {'schemaVersion': 1, 'target': str(root), 'beforeStateDigest': digest(encoded(old)), 'afterStateDigest': digest(encoded(new)),

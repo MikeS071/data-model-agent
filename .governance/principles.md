@@ -11,7 +11,7 @@ scope-specific reason for not-applicable for each conditional principle. The fiv
 general AGENTS principles remain mandatory for all code. Evidence must address
 the user's intent and every scope criterion; a hash cannot prove judgment or reading.
 
-Local adaptations preserve bounded worker delegation, protected approvals, native
+Local adaptations preserve scoped native delegation where permitted, guarded external worker activation, protected approvals, native
 ownership, source isolation and minimum essential scope proof. Use existing tools;
 do not create speculative abstractions, mandatory prototype campaigns or extra tests.
 Principles guide approved work; they do not expand scope or grant operational authority.
@@ -72,7 +72,7 @@ the programme context. No other plugin skills, scripts, runtime, provider or aut
 updates are installed.
 
 The leaves remove editor-specific invocation metadata. Local changes are: authorisation
-and bounded worker delegation instead of unrestricted fan-out/review-after-publishing;
+and scoped delegation instead of unrestricted fan-out/review-after-publishing;
 native ownership instead of PID-based stale reclamation; scoped deletion/migration
 and explicit external compatibility; minimum essential verification instead of
 blanket campaigns; reuse of existing tools and task records; preservation of meaningful

@@ -37,6 +37,10 @@ jobs:
       - name: Run TypeScript check
         run: pnpm --dir apps/web exec tsc --noEmit
 
+      - name: Check VS Code provider bridge
+        run: |
+          pnpm --dir apps/vscode-provider-protocol test
+          pnpm --dir apps/vscode-provider check
+
       - name: Build production application
         run: pnpm build
-

@@ -1,8 +1,11 @@
 {
   "schemaVersion": 1,
-  "status": "local-proof-complete-publication-pending",
-  "date": "2026-09-22",
-  "source": "7829176965352d0af2dce202c1cb934062bf026c",
+  "status": "governance-verification-complete",
+  "date": "2026-09-23",
+  "source": {
+    "release": "v0.1.0",
+    "snapshot": "Source-only public snapshot with fresh Git history"
+  },
   "intent": "Portable, deterministic project-local governance preserving explicit project authority and independently verified scope success.",
   "criteria": {
     "contracts": "Seven focused checks: project binding, scope/intent/criteria and result semantics; capacity validation does not activate workers.",
@@ -11,23 +14,22 @@
     "cli": "Six actual command/baseline/scope/loop checks, including automatic checkout-bound scope-v2 creation from committed Markdown and readable validation without hash output, missing policy, foreign/stale source and typed loop routes.",
     "specification": "Three focused tests parse strict request/design Markdown, validate the approved dev-stack pair, require separate acceptance, matching revisions, Mermaid diagrams, stable decisions and committed unchanged files; legacy paths and scope v1 are refused.",
     "loop": "Six focused state-machine checks cover initial build, defect repair, complete verification, distinct scope/oracle/environment/blocked routing, retry/time budgets, terminal records and source mismatch. A two-iteration local pilot failed on subtraction, routed to build, passed after addition and routed to report.",
-    "installer": "Four lifecycle groups on empty/existing projects: readable pending plans without human digests, install/verify/no-op, changed release/adapter refusal, upgrade, rollback/remove and reversal, conflicts, integrity, duplicate skills, interrupted recovery. Installed actions/review sample reuses nine checks.",
-    "worker": "Thirty-six focused checks cover explicit provider/model configuration, inert package defaults, patch/native-child behavior, scope/attempt bounds, canonical-runner consistency, public wrappers and the actual bubblewrap boundary. No paid worker trial was run.",
-    "skills": "39 canonical/native skill files structurally validated, including the self-verifying canonical skill and native router. Prior session proof discovered the native session skill, read its full leaf, reported correct source and incomplete task review, and confirmed disabled/capacity-two defaults.",
-    "package": "Explicit 103-file portable path inventory, immutable source provenance, a release-level branding regression check and the retained third-party MIT notice; no application source or private history."
+    "installer": "Six lifecycle groups on empty/existing projects: readable pending plans without human digests, install/verify/no-op, changed release/adapter refusal, archive permission normalisation with byte and executable-bit integrity, identical existing-file adoption and restoration after upgrade, rollback/remove, conflicts, duplicate skills and interrupted recovery.",
+    "worker": "Forty-eight worker, admission and runtime checks cover explicit provider/model configuration, disabled package defaults, patch/native-child behavior, four-attempt correction bounds across activation changes, canonical-runner consistency, public wrappers and the bubblewrap boundary. No paid worker call was run.",
+    "skills": "All 51 canonical/native skill files passed structural validation, including five portable reconciliation skills and their native routers. Selection remains conditional; validation alone does not prove host discovery.",
+    "package": "Explicit 168-file portable path inventory, release-level branding regression check, project MIT licence and retained third-party notices; no application source or private history. Thirty-seven Node governance tests passed."
   },
-  "leadAssessment": "Local artifacts meet recorded portable-core and installation intent. A command pass or valid record does not prove application acceptance. Actual release/publication and first adoption remain separate.",
+  "leadAssessment": "The source release passed governance and installer checks before this public snapshot. Local artifacts meet recorded portable-core, skill and installation intent. Commands and valid records do not prove application acceptance or a live external-model run.",
   "remaining": [
-    "Approve private destination creation and initial main branch publication/release",
-    "Read back exact published commit/manifest and required CI",
-    "Separate scoped approval for first real repository adoption"
+    "First project adoption requires its own scope and acceptance",
+    "Live provider configuration and application outcomes remain unproven"
   ],
   "host": {
     "os": "Linux",
     "node": "24.14.0",
     "python": "3.12.3",
     "git": "2.43.0",
-    "codex": "0.149.1"
+    "codex": "0.154.0"
   },
   "noClaims": [
     "No application or production acceptance",

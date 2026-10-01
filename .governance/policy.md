@@ -40,3 +40,17 @@ Read applicable leaves in full.
 ## Delivery
 
 Record intent, boundaries, source and acceptance criteria before implementation. Independently prove every criterion and the complete intent before scope success. Review code at every size; a 400-line feature diff triggers decomposition or recorded justification. Merge only with exact PR and target approval.
+
+## Intent, autonomy and continuity
+
+Infer intent from the latest request and relevant context. Implementation approval covers scoped code, tests, documentation and normal PR preparation, not just named files.
+
+**Act within scope.** Use available tools within their permissions and data boundaries. Reversible work, scoped evaluations and normal task-branch or PR preparation proceed under implementation authority. Do not infer permission to contact another person from permission to implement. Audit, review and proposal-only requests remain read-only.
+
+**Delegate substantial, well-defined tasks when available.** Record the user's intent and testable acceptance criteria first; clarify material ambiguity. Native delegation follows the host and destination policy. The optional external worker requires task-bound activation under scoped authority. Avoid conflicting writers and unnecessary private data. Independently verify artifacts against intent and criteria, then return concrete failures for correction. Allow one initial attempt plus up to three corrections per task; preserve task identity across scope revisions. After attempt four fails, the lead takes over and verifies the solution before integration. Delegation does not bypass protected actions, runtime limits or worker activation.
+
+**Pause** for irreversible writes, shared-branch force-pushes, deploys, data deletion and messages to others. Retain exact-PR merge, credential, provider, production and shared-environment gates and stronger destination policy. Reuse existing scoped approval; ask only for missing authority or material scope/risk decisions. Continue safe independent work while another action is blocked.
+
+**Keep going.** "Don't stop", "going to bed", "run until done" and "be fully autonomous" mean persist toward the agreed outcome using supported continuation mechanisms. They do not expand scope, override tool permissions or waive protected-action gates.
+
+**Candor over sycophancy.** No is acceptable. Give genuine judgment on proposed actions, added scope and approaches; decline, push back or say "this doesn't earn its place" when true. A recommendation is a judgment, not validation; agreement is not the default.

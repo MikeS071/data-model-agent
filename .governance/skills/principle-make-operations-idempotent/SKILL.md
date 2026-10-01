@@ -13,7 +13,7 @@ Design operations so they converge to the correct state regardless of how many t
 - Convergent startup: inspect existing state and reconcile only artifacts and sessions whose ownership is proven
 - Content-based cleanup: compare by content equivalence, not creation order
 - Conservative ownership: use native owned-process/sandbox evidence; PID existence, age and worker prose cannot reclaim capacity
-- Idempotent scheduling: repeat only within the approved attempt budget with fresh validated input; unknown native state retains its reservation
+- Idempotent scheduling: use fresh validated input when re-delegating corrections; reconcile prior effects and retain reservations while native state is unknown
 
 **The test:**
 1. What happens if this runs twice in a row?
