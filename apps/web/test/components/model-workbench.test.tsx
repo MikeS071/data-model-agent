@@ -7,10 +7,9 @@ import { ModelWorkbench } from '@/components/model-workbench';
 import type { ProjectRecord } from '@/storage/sqlite-repository';
 import { generatedClaimPayment } from '../fixtures/claim-payment';
 
-vi.mock('mermaid', () => ({ default: {
-  initialize: vi.fn(),
-  render: vi.fn(async () => ({ svg: '<svg aria-label="Rendered Mermaid"><text>Claim</text></svg>' })),
-} }));
+vi.mock('@/render/mermaid-client', () => ({
+  renderMermaidSvg: vi.fn(async () => ({ svg: '<svg aria-label="Rendered Mermaid"><text>Claim</text></svg>' })),
+}));
 
 afterEach(() => {
   cleanup();
@@ -250,7 +249,9 @@ describe('Michal modelling workflow', () => {
     expect(document.querySelectorAll('.thinking-dots i')).toHaveLength(3);
     expect((composer as HTMLTextAreaElement).disabled).toBe(false);
     expect((composer as HTMLTextAreaElement).value).toBe('');
-    expect((screen.getByLabelText('Canonical model business definition') as HTMLTextAreaElement).disabled).toBe(true);
+    const structuredFields = screen.getByLabelText('Canonical model business definition')
+      .closest<HTMLFieldSetElement>('fieldset.structured-editor-fields');
+    expect(structuredFields?.disabled).toBe(true);
     await user.type(composer, 'Draft the next request.');
 
     const successful = {
@@ -265,7 +266,7 @@ describe('Michal modelling workflow', () => {
     expect(screen.queryByText('Thinking...')).toBeNull();
     expect((composer as HTMLTextAreaElement).value).toBe('Draft the next request.');
     expect(screen.getByText('Keep payment history.')).toBeTruthy();
-    expect((screen.getByLabelText('Canonical model business definition') as HTMLTextAreaElement).disabled).toBe(false);
+    expect(structuredFields?.disabled).toBe(false);
 
     await user.click(screen.getByRole('button', { name: 'Send message' }));
     expect(screen.getByText('Draft the next request.')).toBeTruthy();
@@ -284,6 +285,7 @@ describe('Michal modelling workflow', () => {
     };
     let pollCount = 0;
     let current = project;
+    let completePoll: ((response: Response) => void) | undefined;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input), method = init?.method ?? 'GET';
       if (url === '/api/projects' && method === 'GET') return Response.json([]);
@@ -291,8 +293,7 @@ describe('Michal modelling workflow', () => {
       if (url.endsWith('/generation-jobs') && method === 'POST') return Response.json(generationJob(project.id, 'running'), { status: 202 });
       if (url === '/api/generation-jobs/job-1') {
         pollCount += 1;
-        current = { ...current, draft: generatedClaimPayment };
-        return Response.json(generationJob(project.id, 'completed', { transcript: '{"model":{"name":"Claim Payment"}}' }));
+        return new Promise<Response>(resolve => { completePoll = resolve; });
       }
       if (url === `/api/projects/${project.id}`) return Response.json(current);
       throw new Error(`unexpected request ${method} ${url}`);
@@ -309,8 +310,10 @@ describe('Michal modelling workflow', () => {
 
     expect(await screen.findByText('Receiving live model output…')).toBeTruthy();
     expect(screen.getByLabelText('Live provider transcript').textContent).toContain('"Claim Payment"');
+    await vi.waitFor(() => expect(pollCount).toBeGreaterThan(0));
+    current = { ...current, draft: generatedClaimPayment };
+    completePoll!(Response.json(generationJob(project.id, 'completed', { transcript: '{"model":{"name":"Claim Payment"}}' })));
     expect(await screen.findByRole('heading', { name: 'Claim Payment model' }, { timeout: 2500 })).toBeTruthy();
-    expect(pollCount).toBeGreaterThan(0);
     expect(screen.queryByRole('heading', { name: 'Building your model' })).toBeNull();
   });
 

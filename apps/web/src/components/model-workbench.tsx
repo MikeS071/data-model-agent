@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { CanonicalModel, GenerationResult, SourceArtifact, SourceArtifactInput, SourceKind } from '@/domain/model';
+import { renderMermaidSvg } from '@/render/mermaid-client';
 
 interface VersionSummary { id: string; versionNumber: number; createdAt: string }
 interface ProjectSummary { id: string; title: string; updatedAt: string; versionCount: number; hasDraft: boolean }
@@ -212,9 +213,7 @@ function MermaidPreview({ source, onRendered }: { source: string; onRendered?: (
   useEffect(() => {
     let active = true;
     onRendered?.(false);
-    void import('mermaid').then(async ({ default: mermaid }) => {
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'neutral', htmlLabels: false });
-      const result = await mermaid.render(`model-${crypto.randomUUID()}`, source);
+    void renderMermaidSvg(`model-${crypto.randomUUID()}`, source).then(result => {
       const document = new DOMParser().parseFromString(result.svg, 'text/html');
       const element = document.querySelector('svg');
       const viewBox = element?.getAttribute('viewBox')?.split(/\s+/u).map(Number);
