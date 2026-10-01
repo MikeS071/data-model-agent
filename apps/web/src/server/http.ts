@@ -13,8 +13,18 @@ const publicErrors = new Set([
   'provider-config-invalid', 'provider-output-missing', 'provider-output-invalid', 'provider-output-incomplete',
   'generation-result-invalid', 'revision-result-invalid', 'revision-message-invalid', 'chat-message-invalid', 'entities-invalid',
   'provider-settings-invalid', 'generation-in-progress', 'generation-job-missing', 'generation-job-unavailable',
+  'csv-encoding-invalid', 'csv-malformed', 'csv-empty', 'csv-columns-exceeded', 'csv-rows-exceeded',
+  'csv-width-inconsistent', 'csv-header-invalid', 'csv-sensitive-columns-invalid', 'csv-analysis-required',
+  'csv-confirmation-required', 'csv-confirmation-stale', 'csv-intake-session-expired', 'csv-masking-key-invalid',
+  'database-schema-newer',
 ]);
-const clientErrors = new Set(['project-input-invalid', 'requirements-missing', 'sources-invalid', 'source-invalid', 'source-kind-unsupported', 'source-binary', 'source-too-large', 'sources-too-large', 'chat-message-invalid', 'provider-settings-invalid']);
+const clientErrors = new Set([
+  'project-input-invalid', 'requirements-missing', 'sources-invalid', 'source-invalid', 'source-kind-unsupported',
+  'source-binary', 'source-too-large', 'sources-too-large', 'chat-message-invalid', 'provider-settings-invalid',
+  'csv-encoding-invalid', 'csv-malformed', 'csv-empty', 'csv-columns-exceeded', 'csv-rows-exceeded',
+  'csv-width-inconsistent', 'csv-header-invalid', 'csv-sensitive-columns-invalid', 'csv-analysis-required',
+  'csv-confirmation-required', 'csv-confirmation-stale', 'csv-intake-session-expired',
+]);
 
 const errorCode = (error: unknown) => {
   const candidate = error instanceof Error ? error.message : '';
@@ -105,6 +115,33 @@ export async function getProviderModels(request: Request, service: ModelService)
   } catch (error) { return errorResponse(error); }
 }
 
+const formJson = <T>(form: FormData, name: string): T | undefined => {
+  const value = form.get(name);
+  if (typeof value !== 'string' || !value) return undefined;
+  try { return JSON.parse(value) as T; }
+  catch { throw new Error('invalid-request'); }
+};
+
+export async function analyzeCsv(request: Request, service: ModelService) {
+  try {
+    const form = await request.formData();
+    const file = form.get('file');
+    if (!(file instanceof Blob)) throw new Error('invalid-request');
+    const headerMode = form.get('headerMode');
+    const projectId = form.get('projectId');
+    const intakeSessionId = form.get('intakeSessionId');
+    return Response.json(service.analyzeCsv({
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      projectId: typeof projectId === 'string' && projectId ? projectId : undefined,
+      intakeSessionId: typeof intakeSessionId === 'string' && intakeSessionId ? intakeSessionId : undefined,
+      headerMode: headerMode === 'first-row' || headerMode === 'generated' ? headerMode : undefined,
+      headers: formJson<string[]>(form, 'headers'),
+      additionalSensitiveColumns: formJson<number[]>(form, 'additionalSensitiveColumns'),
+      confirmed: form.get('confirmed') === 'true',
+    }));
+  } catch (error) { return errorResponse(error); }
+}
+
 export async function createProject(request: Request, service: ModelService) {
   try {
     const input = await json(request);
@@ -144,6 +181,7 @@ export async function createGenerationJob(
       service,
       projectId,
       typeof input.clarification === 'string' ? input.clarification : null,
+      typeof input.retryOfJobId === 'string' ? input.retryOfJobId : null,
     )), { status: 202 });
   } catch (error) { return errorResponse(error); }
 }

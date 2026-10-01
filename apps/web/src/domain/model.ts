@@ -1,16 +1,61 @@
 export type Cardinality = 'one' | 'zero-or-one' | 'one-or-many' | 'zero-or-many';
 export type AttributeKey = 'PK' | 'FK' | 'NONE';
-export type SourceKind = 'text' | 'markdown' | 'sql' | 'ddl' | 'json';
+export type SourceKind = 'text' | 'markdown' | 'sql' | 'ddl' | 'json' | 'csv';
+export type CsvHeaderMode = 'first-row' | 'generated';
+export type CsvInferredType = 'empty' | 'boolean' | 'integer' | 'decimal' | 'date' | 'datetime' | 'string';
+
+export interface CsvColumnProfile {
+  index: number;
+  name: string;
+  inferredType: CsvInferredType;
+  nullable: boolean;
+  nullRatio: number;
+  uniqueRatio: number;
+  minLength: number;
+  maxLength: number;
+  formats: string[];
+  sensitive: boolean;
+  sensitivity: string[];
+}
+
+export interface CsvSampleRow {
+  rowIndex: number;
+  values: string[];
+}
+
+export interface CsvAnalysis {
+  analysisVersion: number;
+  contentDigest: string;
+  maskingGenerationId: string;
+  intakeSessionId: string | null;
+  inferredHeaderMode: CsvHeaderMode;
+  headerMode: CsvHeaderMode;
+  headers: string[];
+  rowCount: number;
+  columnCount: number;
+  columns: CsvColumnProfile[];
+  sampleRows: CsvSampleRow[];
+  additionalSensitiveColumns: number[];
+  confirmed: boolean;
+  confirmedAt: string | null;
+}
 
 export interface SourceArtifactInput {
   name: string;
   kind: SourceKind;
   content: string;
+  csvAnalysis?: CsvAnalysis | null;
 }
 
 export interface SourceArtifact extends SourceArtifactInput {
   id: string;
   ordinal: number;
+}
+
+export interface ProviderSourceInput {
+  name: string;
+  kind: SourceKind;
+  content: string;
 }
 
 export interface ModelAttribute {

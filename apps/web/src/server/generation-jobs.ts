@@ -24,9 +24,14 @@ export class GenerationJobManager {
     this.#providerFactory = providerFactory;
   }
 
-  start(service: ModelService, projectId: string, clarification: string | null = null): GenerationJobRecord {
+  start(
+    service: ModelService,
+    projectId: string,
+    clarification: string | null = null,
+    retryOfJobId: string | null = null,
+  ): GenerationJobRecord {
     const prepared = service.prepareGeneration(projectId, clarification);
-    const job = this.#repository.createGenerationJob(projectId, prepared.providerSettings, prepared.request);
+    const job = this.#repository.createGenerationJob(projectId, prepared.providerSettings, prepared.request, retryOfJobId);
     const controller = new AbortController();
     this.#controllers.set(job.id, controller);
     void this.#run(job.id, controller).catch(error => {

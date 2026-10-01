@@ -2,7 +2,7 @@ import type { SourceArtifactInput, SourceKind } from './model';
 
 export const MAX_SOURCE_BYTES = 1_000_000;
 export const MAX_TOTAL_SOURCE_BYTES = 5_000_000;
-const kinds = new Set<SourceKind>(['text', 'markdown', 'sql', 'ddl', 'json']);
+const kinds = new Set<SourceKind>(['text', 'markdown', 'sql', 'ddl', 'json', 'csv']);
 
 export function normalizeSourceArtifacts(sources: SourceArtifactInput[]): SourceArtifactInput[] {
   if (!Array.isArray(sources)) throw new Error('sources-invalid');
@@ -16,6 +16,12 @@ export function normalizeSourceArtifacts(sources: SourceArtifactInput[]): Source
     if (bytes > MAX_SOURCE_BYTES) throw new Error('source-too-large');
     total += bytes;
     if (total > MAX_TOTAL_SOURCE_BYTES) throw new Error('sources-too-large');
-    return { name: source.name.trim(), kind: source.kind, content };
+    if (source.kind !== 'csv' && source.csvAnalysis != null) throw new Error('source-invalid');
+    return {
+      name: source.name.trim(),
+      kind: source.kind,
+      content,
+      ...(source.kind === 'csv' ? { csvAnalysis: source.csvAnalysis ?? null } : {}),
+    };
   });
 }
