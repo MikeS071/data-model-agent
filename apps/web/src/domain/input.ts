@@ -18,7 +18,7 @@ export function normalizeSourceArtifacts(sources: SourceArtifactInput[]): Source
     if (total > MAX_TOTAL_SOURCE_BYTES) throw new Error('sources-too-large');
     if (source.kind !== 'csv' && source.csvAnalysis != null) throw new Error('source-invalid');
     return {
-      name: source.name.trim(),
+      name: source.name,
       kind: source.kind,
       content,
       ...(source.kind === 'csv' ? { csvAnalysis: source.csvAnalysis ?? null } : {}),

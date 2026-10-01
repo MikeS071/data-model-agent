@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ModelWorkbench } from '@/components/model-workbench';
 import type { ProjectRecord } from '@/storage/sqlite-repository';
-import type { CsvAnalysis } from '@/domain/model';
+import type { CsvAnalysis, SourceArtifactInput } from '@/domain/model';
 import { generatedClaimPayment } from '../fixtures/claim-payment';
 
 vi.mock('@/render/mermaid-client', () => ({
@@ -50,11 +50,11 @@ const csvAnalysisFixture = (confirmed: boolean, intakeSessionId: string | null =
   rowCount: 1,
   columnCount: 2,
   columns: [
-    { index: 0, name: 'customer_id', inferredType: 'integer', nullable: false, nullRatio: 0, uniqueRatio: 1, minLength: 1, maxLength: 1, formats: [], sensitive: true, sensitivity: ['identifier'] },
-    { index: 1, name: 'email', inferredType: 'string', nullable: false, nullRatio: 0, uniqueRatio: 1, minLength: 13, maxLength: 13, formats: ['email'], sensitive: true, sensitivity: ['email'] },
+    { index: 0, name: 'customer_id', inferredType: 'integer', nullable: false, nullRatio: 0, uniqueRatio: 1, minLength: 1, maxLength: 1, formats: [], sensitive: true, sensitivity: ['manual'] },
+    { index: 1, name: 'email', inferredType: 'string', nullable: false, nullRatio: 0, uniqueRatio: 1, minLength: 13, maxLength: 13, formats: ['email'], sensitive: true, sensitivity: ['manual'] },
   ],
   sampleRows: [{ rowIndex: 0, values: ['<masked:abc>', '<masked:def>'] }],
-  additionalSensitiveColumns: [],
+  additionalSensitiveColumns: [0, 1],
   confirmed,
   confirmedAt: confirmed ? '2026-10-01T00:00:00.000Z' : null,
 });
@@ -66,6 +66,7 @@ describe('Michal modelling workflow', () => {
       if (url === '/api/projects' && method === 'GET') return Response.json([]);
       if (url === '/api/csv-analysis' && method === 'POST') {
         const form = init?.body as FormData;
+        expect((form.get('file') as File).name).toBe('customers.csv');
         return Response.json({
           content: 'customer_id,email\n1,a@example.com\n',
           analysis: csvAnalysisFixture(form.get('confirmed') === 'true'),
@@ -87,22 +88,27 @@ describe('Michal modelling workflow', () => {
 
     const csvReview = await screen.findByRole('region', { name: 'CSV review customers.csv' }) as HTMLDetailsElement;
     expect(csvReview).toBeTruthy();
+    expect(document.querySelectorAll('.csv-review')).toHaveLength(1);
+    expect(document.querySelectorAll('.source-list li')).toHaveLength(0);
+    expect(csvReview.querySelector(':scope > summary')?.textContent).toContain('customers.csv');
     expect(csvReview.open).toBe(false);
     await user.click(csvReview.querySelector('summary')!);
     expect(csvReview.open).toBe(true);
     expect(screen.getByText('<masked:def>')).toBeTruthy();
-    expect((screen.getByRole('button', { name: /Generate draft/u }) as HTMLButtonElement).disabled).toBe(true);
-    await user.click(screen.getByRole('button', { name: 'Confirm CSV' }));
+    expect(screen.getByRole('checkbox', { name: 'Unmask email in customers.csv' })).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Save before generation' }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Confirm CSV customers.csv' }));
     await waitFor(() => expect(csvReview.textContent).toContain('CSV confirmed'));
-    expect((screen.getByRole('button', { name: /Generate draft/u }) as HTMLButtonElement).disabled).toBe(false);
+    expect(csvReview.querySelector(':scope > summary')?.textContent).toContain('customers.csv');
+    expect((screen.getByRole('button', { name: 'Save model' }) as HTMLButtonElement).disabled).toBe(false);
 
-    await user.clear(screen.getByLabelText('Column 1'));
-    await user.type(screen.getByLabelText('Column 1'), 'customer_key');
-    expect((screen.getByRole('button', { name: /Generate draft/u }) as HTMLButtonElement).disabled).toBe(true);
+    await user.clear(screen.getByLabelText('Column 1 name for customers.csv'));
+    await user.type(screen.getByLabelText('Column 1 name for customers.csv'), 'customer_key');
+    expect((screen.getByRole('button', { name: 'Save model' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('invalidates a confirmed CSV after raw edits and requires reanalysis', async () => {
-    const project: ProjectRecord = {
+    let project: ProjectRecord = {
       id: 'project-csv',
       title: 'Customer model',
       requirements: 'Model customers.',
@@ -127,6 +133,15 @@ describe('Michal modelling workflow', () => {
         id: project.id, title: project.title, updatedAt: project.updatedAt, versionCount: 0, hasDraft: true,
       }]);
       if (url === `/api/projects/${project.id}` && method === 'GET') return Response.json(project);
+      if (url === `/api/projects/${project.id}` && method === 'PUT') {
+        const body = JSON.parse(String(init?.body)) as { requirements: string; sources: SourceArtifactInput[] };
+        project = {
+          ...project,
+          requirements: body.requirements,
+          sources: body.sources.map((source, ordinal) => ({ ...source, id: `source-${ordinal}`, ordinal })),
+        };
+        return Response.json(project);
+      }
       if (url.includes('/api/settings/provider/models')) return Response.json([{ id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol' }]);
       if (url.endsWith('/generation-jobs') && method === 'GET') return new Response(null, { status: 204 });
       if (url === '/api/csv-analysis' && method === 'POST') {
@@ -143,18 +158,109 @@ describe('Michal modelling workflow', () => {
     render(<ModelWorkbench />);
     await user.click(await screen.findByRole('button', { name: /Customer model/u }));
     expect(await screen.findByRole('heading', { name: 'Claim Payment model' })).toBeTruthy();
+    const csvReview = screen.getByRole('region', { name: 'CSV review customers.csv' }) as HTMLDetailsElement;
+    expect(csvReview.open).toBe(false);
+    await user.click(csvReview.querySelector(':scope > summary')!);
     fireEvent.change(screen.getByLabelText('Source content customers.csv'), {
       target: { value: 'customer_id,email\n1,changed@example.com\n' },
     });
     expect(await screen.findByText('CSV review required')).toBeTruthy();
     expect((screen.getByRole('button', { name: /Regenerate with changes/u }) as HTMLButtonElement).disabled).toBe(true);
-    const csvReview = screen.getByRole('region', { name: 'CSV review customers.csv' }) as HTMLDetailsElement;
-    expect(csvReview.open).toBe(false);
-    await user.click(csvReview.querySelector('summary')!);
-    await user.click(screen.getByRole('button', { name: 'Analyse CSV' }));
-    await user.click(await screen.findByRole('button', { name: 'Confirm CSV' }));
+    expect(csvReview.open).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Analyse CSV customers.csv' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirm CSV customers.csv' }));
     await waitFor(() => expect(screen.getByRole('region', { name: 'CSV review customers.csv' }).textContent).toContain('CSV confirmed'));
     expect((screen.getByRole('button', { name: /Regenerate with changes/u }) as HTMLButtonElement).disabled).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Save generation inputs' }));
+    expect(await screen.findByRole('button', { name: 'Generation inputs saved' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeTruthy();
+    expect(csvReview.open).toBe(true);
+  });
+
+  it('keeps filenames and disclosure state stable when another CSV is removed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/projects' && method === 'GET') return Response.json([]);
+      if (url === '/api/csv-analysis' && method === 'POST') {
+        const file = (init?.body as FormData).get('file') as File;
+        return Response.json({
+          content: `customer_id,email\n1,${file.name}@example.com\n`,
+          analysis: csvAnalysisFixture(false),
+        });
+      }
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await screen.findByText('No saved models yet');
+    await user.type(screen.getByLabelText('Model name'), 'Multiple CSVs');
+    await user.type(screen.getByLabelText('Requirements'), 'Keep each CSV distinct.');
+    await user.upload(screen.getByLabelText('Source files'), [
+      new File(['customer_id,email\n1,first@example.com\n'], 'first.csv', { type: 'text/csv' }),
+      new File(['customer_id,email\n2,second@example.com\n'], 'second.csv', { type: 'text/csv' }),
+    ]);
+
+    const first = await screen.findByRole('region', { name: 'CSV review first.csv' }) as HTMLDetailsElement;
+    const second = await screen.findByRole('region', { name: 'CSV review second.csv' }) as HTMLDetailsElement;
+    await user.click(second.querySelector(':scope > summary')!);
+    expect(second.open).toBe(true);
+    await user.click(first.querySelector(':scope > summary')!);
+    await user.click(screen.getByRole('button', { name: 'Remove CSV first.csv' }));
+
+    expect(screen.queryByRole('region', { name: 'CSV review first.csv' })).toBeNull();
+    const remaining = screen.getByRole('region', { name: 'CSV review second.csv' }) as HTMLDetailsElement;
+    expect(remaining.open).toBe(true);
+    expect(remaining.querySelector(':scope > summary')?.textContent).toContain('second.csv');
+    expect(document.querySelectorAll('.csv-review')).toHaveLength(1);
+  });
+
+  it('ignores an upload response after the intake is reset', async () => {
+    let resolveAnalysis!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/projects' && method === 'GET') return Response.json([]);
+      if (url === '/api/csv-analysis' && method === 'POST') {
+        return new Promise<Response>(resolve => { resolveAnalysis = resolve; });
+      }
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await screen.findByText('No saved models yet');
+    await user.upload(screen.getByLabelText('Source files'), new File(
+      ['customer_id,email\n1,a@example.com\n'],
+      'stale.csv',
+      { type: 'text/csv' },
+    ));
+    await waitFor(() => expect((screen.getByLabelText('Source files') as HTMLInputElement).disabled).toBe(true));
+    await user.click(screen.getByRole('button', { name: 'Return home to Model Foundry' }));
+    resolveAnalysis(Response.json({
+      content: 'customer_id,email\n1,a@example.com\n',
+      analysis: csvAnalysisFixture(false),
+    }));
+    await waitFor(() => expect((screen.getByLabelText('Source files') as HTMLInputElement).disabled).toBe(false));
+    expect(screen.queryByRole('region', { name: 'CSV review stale.csv' })).toBeNull();
+  });
+
+  it('unlocks the intake after CSV analysis fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/projects' && method === 'GET') return Response.json([]);
+      if (url === '/api/csv-analysis' && method === 'POST') {
+        return Response.json({ error: 'csv-malformed' }, { status: 400 });
+      }
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await screen.findByText('No saved models yet');
+    await user.upload(screen.getByLabelText('Source files'), new File(['"unterminated'], 'bad.csv', { type: 'text/csv' }));
+    expect(await screen.findByText('Source analysis failed', { exact: true })).toBeTruthy();
+    expect((screen.getByLabelText('Source files') as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByLabelText('Model name') as HTMLInputElement).disabled).toBe(false);
   });
 
   it('creates from text and files, edits the draft, saves a version and exposes downloads', async () => {
@@ -217,6 +323,8 @@ describe('Michal modelling workflow', () => {
     await user.type(screen.getByLabelText('Model name'), 'Claim Payment');
     await user.type(screen.getByLabelText('Requirements'), 'Model claim payments.');
     await user.upload(screen.getByLabelText('Source files'), new File(['CREATE TABLE claim(id UUID);'], 'claims.ddl', { type: 'text/plain' }));
+    await user.click(screen.getByRole('button', { name: 'Save model' }));
+    await screen.findByText('Model saved', { exact: true });
     await user.click(screen.getByRole('button', { name: /Generate draft/u }));
 
     expect(await screen.findByRole('heading', { name: 'Claim Payment model' })).toBeTruthy();
@@ -424,6 +532,8 @@ describe('Michal modelling workflow', () => {
     await screen.findByText('No saved models yet');
     await user.type(screen.getByLabelText('Model name'), 'Claim Payment');
     await user.type(screen.getByLabelText('Requirements'), 'Model claim payments.');
+    await user.click(screen.getByRole('button', { name: 'Save model' }));
+    await screen.findByText('Model saved', { exact: true });
     await user.click(screen.getByRole('button', { name: /Generate draft/u }));
     expect(await screen.findByRole('heading', { name: 'Building your model' })).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: 'Model generation progress' })).toBeTruthy();
@@ -528,6 +638,47 @@ describe('Michal modelling workflow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Return home to Model Foundry' }));
     expect(screen.getByRole('heading', { name: 'Start with what you know' })).toBeTruthy();
+  });
+
+  it('ignores a slower project response after a newer project is selected', async () => {
+    const makeProject = (id: string, title: string, modelName: string): ProjectRecord => ({
+      id,
+      title,
+      requirements: `Model ${title}.`,
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z',
+      sources: [],
+      draft: {
+        ...structuredClone(generatedClaimPayment),
+        model: { ...structuredClone(generatedClaimPayment.model), name: modelName },
+      },
+      versions: [],
+      messages: [],
+      providerSettings: testProviderSettings,
+    });
+    const first = makeProject('first', 'First project', 'First model');
+    const second = makeProject('second', 'Second project', 'Second model');
+    let resolveFirst!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/projects' && method === 'GET') return Response.json([first, second].map(project => ({
+        id: project.id, title: project.title, updatedAt: project.updatedAt, versionCount: 0, hasDraft: true,
+      })));
+      if (url === '/api/projects/first') return new Promise<Response>(resolve => { resolveFirst = resolve; });
+      if (url === '/api/projects/second') return Response.json(second);
+      if (url.includes('/api/settings/provider/models')) return Response.json([{ id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol' }]);
+      if (url.endsWith('/generation-jobs') && method === 'GET') return new Response(null, { status: 204 });
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await user.click(await screen.findByRole('button', { name: /First project/u }));
+    await user.click(screen.getByRole('button', { name: /Second project/u }));
+    expect(await screen.findByRole('heading', { name: 'Second model model' })).toBeTruthy();
+    resolveFirst(Response.json(first));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'First model model' })).toBeNull());
+    expect(screen.getByRole('heading', { name: 'Second model model' })).toBeTruthy();
   });
 
   it('describes GitHub Copilot authentication without exposing an API key field', async () => {

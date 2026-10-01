@@ -10,6 +10,7 @@ describe('source artifact boundary', () => {
       { name: 'schema.ddl', kind: 'ddl', content: 'ALTER TABLE claim ADD amount DECIMAL;' },
       { name: 'schema.json', kind: 'json', content: '{"entity":"Claim"}' },
       { name: 'claims.csv', kind: 'csv', content: 'claim_id,amount\n1,10.00' },
+      { name: ' exact filename .csv ', kind: 'csv', content: 'value\n1' },
     ]);
     expect(actual.map(source => [source.kind, source.content])).toEqual([
       ['text', 'free-form\nrequirements'],
@@ -18,7 +19,9 @@ describe('source artifact boundary', () => {
       ['ddl', 'ALTER TABLE claim ADD amount DECIMAL;'],
       ['json', '{"entity":"Claim"}'],
       ['csv', 'claim_id,amount\n1,10.00'],
+      ['csv', 'value\n1'],
     ]);
+    expect(actual.at(-1)?.name).toBe(' exact filename .csv ');
   });
 
   it('refuses binary, unsupported and oversized artifacts before provider access', () => {

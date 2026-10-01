@@ -150,10 +150,17 @@ async function requestProjectStream(url: string, init: RequestInit, onProgress: 
   return project;
 }
 
-const projectIntake = (project: Project) => ({
+const sourceComparison = ({ name, kind, content, csvAnalysis }: SourceArtifactInput) => ({ name, kind, content, csvAnalysis });
+const projectIntake = (project: Project, previous: SourceArtifactInput[] = []) => ({
   title: project.title,
   requirements: project.requirements,
-  sources: project.sources.map(({ name, kind, content, csvAnalysis }) => ({ name, kind, content, csvAnalysis })),
+  sources: project.sources.map(({ id, name, kind, content, csvAnalysis }, index) => ({
+    clientId: previous[index]?.name === name && previous[index]?.kind === kind ? previous[index].clientId : id,
+    name,
+    kind,
+    content,
+    csvAnalysis,
+  })),
 });
 
 const progressSteps: Array<{ phase: ProviderProgressPhase; label: string }> = [
@@ -238,6 +245,8 @@ function CsvReview({
   onSensitiveChange,
   onConfirm,
   onReanalyse,
+  onContentChange,
+  onRemove,
 }: {
   source: SourceArtifactInput;
   disabled: boolean;
@@ -246,54 +255,64 @@ function CsvReview({
   onSensitiveChange: (index: number, sensitive: boolean) => void;
   onConfirm: () => void;
   onReanalyse: () => void;
+  onContentChange?: (content: string) => void;
+  onRemove: () => void;
 }) {
   const analysis = source.csvAnalysis;
-  if (!analysis || !analysis.contentDigest) return <details className="csv-review needs-review" role="region" aria-label={`CSV review ${source.name}`}>
-    <summary className="csv-review-heading"><div><strong>CSV review required</strong><span>The file changed or has not been analysed.</span></div>
-      <span className="count-badge">Review</span></summary>
-    <div className="csv-review-body"><button className="secondary-button" type="button" disabled={disabled} onClick={onReanalyse}>Analyse CSV</button></div>
-  </details>;
-  return <details className={`csv-review${analysis.confirmed ? ' confirmed' : ' needs-review'}`} role="region" aria-label={`CSV review ${source.name}`}>
-    <summary className="csv-review-heading">
-      <div><strong>{analysis.confirmed ? 'CSV confirmed' : 'Confirm CSV interpretation'}</strong>
-        <span>{analysis.rowCount.toLocaleString()} rows · {analysis.columnCount} columns · sample {analysis.sampleRows.length} rows</span></div>
-      <span className="count-badge">{analysis.confirmed ? 'Confirmed' : 'Review'}</span>
+  const analysisReady = Boolean(analysis?.contentDigest);
+  const status = analysis?.confirmed ? 'Confirmed' : 'Review';
+  return <details className={`csv-review${analysis?.confirmed ? ' confirmed' : ' needs-review'}`} role="region" aria-label={`CSV review ${source.name}`}>
+    <summary className="csv-file-summary">
+      <span className="csv-file-identity"><strong>{source.name}</strong><small>CSV</small></span>
+      <span className="csv-file-status"><strong>{analysis?.confirmed ? 'CSV confirmed' : analysisReady ? 'Confirm CSV interpretation' : 'CSV review required'}</strong>
+        <small>{analysisReady ? `${analysis!.rowCount.toLocaleString()} rows · ${analysis!.columnCount} columns · sample ${analysis!.sampleRows.length}` : 'Expand to analyse the updated file'}</small></span>
+      <span className="count-badge">{status}</span><Icon name="chevron" />
     </summary>
-    <div className="csv-review-body"><label>Header interpretation<select value={analysis.headerMode} disabled={disabled} onChange={event => onHeaderModeChange(event.target.value as CsvHeaderMode)}>
+    <div className="csv-review-body">
+      {onContentChange && <label>CSV source<textarea aria-label={`Source content ${source.name}`} disabled={disabled} value={source.content} rows={8}
+        onChange={event => onContentChange(event.target.value)} /></label>}
+      {!analysisReady ? <div className="csv-review-required"><p>The file changed or has not been analysed.</p>
+        <button className="secondary-button" type="button" aria-label={`Analyse CSV ${source.name}`} disabled={disabled} onClick={onReanalyse}>Analyse CSV</button></div>
+        : <>
+      <label>Header interpretation<select aria-label={`Header interpretation for ${source.name}`} value={analysis!.headerMode} disabled={disabled} onChange={event => onHeaderModeChange(event.target.value as CsvHeaderMode)}>
       <option value="first-row">First row contains headers</option>
       <option value="generated">Generate column names; first row is data</option>
     </select></label>
-    <div className="csv-header-grid">{analysis.headers.map((header, index) => <label key={index}>
-      Column {index + 1}<input value={header} disabled={disabled} onChange={event => {
-        const headers = [...analysis.headers];
+    <div className="csv-header-grid">{analysis!.headers.map((header, index) => <label key={index}>
+      Column {index + 1}<input aria-label={`Column ${index + 1} name for ${source.name}`} value={header} disabled={disabled} onChange={event => {
+        const headers = [...analysis!.headers];
         headers[index] = event.target.value;
         onHeadersChange(headers);
       }} />
     </label>)}</div>
     <div className="csv-profile-scroll"><table className="csv-profile-table">
       <thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Unique</th><th>Formats</th><th>Sensitive</th></tr></thead>
-      <tbody>{analysis.columns.map(column => {
-        const automatic = column.sensitivity.some(value => value !== 'manual');
-        const manuallySensitive = analysis.additionalSensitiveColumns.includes(column.index);
-        return <tr key={column.index}><th>{analysis.headers[column.index]}</th><td>{column.inferredType}</td>
+      <tbody>{analysis!.columns.map(column => {
+        const manuallySensitive = analysis!.additionalSensitiveColumns.includes(column.index);
+        return <tr key={column.index}><th>{analysis!.headers[column.index]}</th><td>{column.inferredType}</td>
           <td>{Math.round(column.nullRatio * 100)}%</td><td>{Math.round(column.uniqueRatio * 100)}%</td>
           <td>{column.formats.join(', ') || '—'}</td><td><label className="csv-sensitive-choice">
-            <input type="checkbox" checked={automatic || manuallySensitive} disabled={disabled || automatic}
+            <input type="checkbox" checked={manuallySensitive} disabled={disabled}
+              aria-label={`${manuallySensitive ? 'Unmask' : 'Mask'} ${analysis!.headers[column.index]} in ${source.name}`}
               onChange={event => onSensitiveChange(column.index, event.target.checked)} />
-            {automatic ? column.sensitivity.filter(value => value !== 'manual').join(', ') : 'Mark sensitive'}
+            {manuallySensitive ? 'Masked' : 'Mask values'}
           </label></td></tr>;
       })}</tbody>
     </table></div>
-    <details className="csv-sample"><summary>Masked distributed sample <span>{analysis.sampleRows.length} rows</span></summary>
-      <div className="csv-profile-scroll"><table className="csv-profile-table"><thead><tr><th>Row</th>
-        {analysis.headers.map((header, index) => <th key={index}>{header}</th>)}</tr></thead>
-        <tbody>{analysis.sampleRows.map(row => <tr key={row.rowIndex}><th>{row.rowIndex + 1}</th>
-          {row.values.map((value, index) => <td key={index}>{value || '—'}</td>)}</tr>)}</tbody></table></div>
-    </details>
-    <div className="csv-review-actions"><p>Only this profile and masked sample will be sent to the configured provider.</p>
-      <button className={analysis.confirmed ? 'secondary-button' : 'primary-button'} type="button" disabled={disabled} onClick={onConfirm}>
-        {analysis.confirmed ? 'Reconfirm CSV' : 'Confirm CSV'}
-      </button></div>
+    <div className="csv-sample-heading"><strong>Provider-bound distributed sample</strong><span>{analysis!.sampleRows.length} rows</span></div>
+    <div className="csv-profile-scroll"><table className="csv-profile-table"><thead><tr><th>Row</th>
+      {analysis!.headers.map((header, index) => <th key={index}>{header}</th>)}</tr></thead>
+      <tbody>{analysis!.sampleRows.map(row => <tr key={row.rowIndex}><th>{row.rowIndex + 1}</th>
+        {row.values.map((value, index) => <td key={index}>{value || '—'}</td>)}</tr>)}</tbody></table></div>
+    <div className="csv-review-actions"><p>This exact sample will be sent to the configured provider. Values are unchanged unless you mark their column sensitive.</p>
+      <div><button className="text-button destructive" type="button" aria-label={`Remove CSV ${source.name}`} disabled={disabled} onClick={onRemove}>Remove CSV</button>
+        <button className={analysis!.confirmed ? 'secondary-button' : 'primary-button'} type="button"
+          aria-label={`${analysis!.confirmed ? 'Reconfirm' : 'Confirm'} CSV ${source.name}`} disabled={disabled} onClick={onConfirm}>
+          {analysis!.confirmed ? 'Reconfirm CSV' : 'Confirm CSV'}
+        </button></div></div>
+      </>}
+      {!analysisReady && <button className="text-button destructive csv-remove-button" type="button"
+        aria-label={`Remove CSV ${source.name}`} disabled={disabled} onClick={onRemove}>Remove CSV</button>}
     </div>
   </details>;
 }
@@ -695,6 +714,8 @@ export function ModelWorkbench() {
   const [generationJob, setGenerationJob] = useState<GenerationJob | null>(null);
   const [projectProviderDirty, setProjectProviderDirty] = useState(false);
   const [modelExportBusy, setModelExportBusy] = useState<'copy' | 'pdf' | null>(null);
+  const [csvAnalysisPending, setCsvAnalysisPending] = useState<Set<string>>(new Set());
+  const [sourceUploadBusy, setSourceUploadBusy] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [mermaidExportReady, setMermaidExportReady] = useState(false);
   const editRevision = useRef(0);
@@ -706,12 +727,24 @@ export function ModelWorkbench() {
   const providerTranscript = useRef('');
   const providerTranscriptFrame = useRef<number | null>(null);
   const generationPoll = useRef(0);
+  const intakeEpoch = useRef(0);
+  const sourceUploadInFlight = useRef(false);
+  const csvAnalysisRequests = useRef(new Map<string, number>());
+  const providerSelectionRequest = useRef(0);
 
   const refreshProjects = async () => setProjects(await requestJson<ProjectSummary[]>('/api/projects'));
   const loadProviderModels = async (providerType: ProviderType) =>
     requestJson<ProviderModelOption[]>(`/api/settings/provider/models?providerType=${encodeURIComponent(providerType)}`);
   useEffect(() => { void refreshProjects().catch(error => setError(message(error))); }, []);
-  useEffect(() => { setExpandedEntities(new Set()); setPendingChatMessage(null); setChatOpen(false); }, [project?.id]);
+  useEffect(() => {
+    sourceUploadInFlight.current = false;
+    setSourceUploadBusy(false);
+    setExpandedEntities(new Set());
+    setPendingChatMessage(null);
+    setCsvAnalysisPending(new Set());
+    csvAnalysisRequests.current.clear();
+    setChatOpen(false);
+  }, [project?.id]);
   useEffect(() => {
     if (!chatOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -781,19 +814,19 @@ export function ModelWorkbench() {
     setGenerationJob(null);
   };
 
-  const watchGenerationJob = async (initial: GenerationJob) => {
+  const watchGenerationJob = async (initial: GenerationJob, expectedEpoch = intakeEpoch.current) => {
     const pollId = generationPoll.current + 1;
     generationPoll.current = pollId;
     let job = initial;
     let pollFailures = 0;
-    while (generationPoll.current === pollId) {
+    while (generationPoll.current === pollId && intakeEpoch.current === expectedEpoch) {
       setGenerationJob(job);
       setProviderActivity(activityFromJob(job));
       setStatus(job.message);
       if (job.status === 'completed') {
         const updated = await requestJson<Project>(`/api/projects/${job.projectId}`);
-        if (generationPoll.current !== pollId) return;
-        setProject(updated); setIntake(projectIntake(updated)); setGenerationJob(null); setProviderActivity(null); setDirty(false); setStatus('Draft ready');
+        if (generationPoll.current !== pollId || intakeEpoch.current !== expectedEpoch) return;
+        setProject(updated); setIntake(current => projectIntake(updated, current.sources)); setGenerationJob(null); setProviderActivity(null); setDirty(false); setStatus('Draft ready');
         await refreshProjects();
         return;
       }
@@ -802,7 +835,7 @@ export function ModelWorkbench() {
         return;
       }
       await new Promise(resolve => window.setTimeout(resolve, pollFailures ? Math.min(5000, pollFailures * 1000) : 1000));
-      if (generationPoll.current !== pollId) return;
+      if (generationPoll.current !== pollId || intakeEpoch.current !== expectedEpoch) return;
       try {
         job = await requestJson<GenerationJob>(`/api/generation-jobs/${job.id}`);
         pollFailures = 0;
@@ -818,38 +851,58 @@ export function ModelWorkbench() {
     }
   };
 
-  const resumeLatestGeneration = async (projectId: string) => {
+  const resumeLatestGeneration = async (projectId: string, expectedEpoch: number) => {
     const response = await fetch(`/api/projects/${projectId}/generation-jobs`);
+    if (intakeEpoch.current !== expectedEpoch) return;
     if (response.status === 204) return;
     if (!response.ok) {
       const body = await response.json();
       throw new Error(body?.error ?? 'request-failed');
     }
     const job = await response.json() as GenerationJob;
-    if (job.status !== 'completed') void watchGenerationJob(job).catch(error => {
+    if (job.status !== 'completed' && intakeEpoch.current === expectedEpoch) void watchGenerationJob(job, expectedEpoch).catch(error => {
+      if (intakeEpoch.current !== expectedEpoch) return;
       setError(message(error));
       stopProviderActivity('Generation status is unavailable. Reload to reconnect to the durable job.');
     });
   };
 
   const loadProject = async (id: string) => {
+    const epoch = intakeEpoch.current + 1;
+    intakeEpoch.current = epoch;
+    sourceUploadInFlight.current = false;
+    csvAnalysisRequests.current.clear();
     cancelProviderActivity();
     setError(''); setStatus('Loading…'); setView('workspace');
     try {
       const loaded = await requestJson<Project>(`/api/projects/${id}`);
+      if (intakeEpoch.current !== epoch) return;
       setProject(loaded); setIntake(projectIntake(loaded)); setProjectProviderDirty(false); setStatus('Ready');
-      setProjectModels(await loadProviderModels(loaded.providerSettings.providerType).catch(() => []));
-      await resumeLatestGeneration(id);
+      const models = await loadProviderModels(loaded.providerSettings.providerType).catch(() => []);
+      if (intakeEpoch.current !== epoch) return;
+      setProjectModels(models);
+      await resumeLatestGeneration(id, epoch);
     }
-    catch (error) { setError(message(error)); setStatus('Load failed'); }
+    catch (error) {
+      if (intakeEpoch.current !== epoch) return;
+      setError(message(error)); setStatus('Load failed');
+    }
   };
 
   const goHome = () => {
+    intakeEpoch.current += 1;
+    sourceUploadInFlight.current = false;
+    csvAnalysisRequests.current.clear();
+    setSourceUploadBusy(false);
     cancelProviderActivity();
     setView('workspace'); setProject(null); setIntake(emptyDraft); setPendingChatMessage(null); setProjectProviderDirty(false); setError(''); setStatus('Ready'); setSettingsStatus('');
   };
 
   const openProviderSettings = async () => {
+    intakeEpoch.current += 1;
+    sourceUploadInFlight.current = false;
+    csvAnalysisRequests.current.clear();
+    setSourceUploadBusy(false);
     setView('settings'); setError(''); setSettingsStatus('Loading settings…');
     try {
       const settings = await requestJson<ProviderSettingsView>('/api/settings/provider');
@@ -892,46 +945,70 @@ export function ModelWorkbench() {
 
   const changeProjectProvider = async (providerType: ProviderType) => {
     if (!project) return;
+    const epoch = intakeEpoch.current;
+    const projectId = project.id;
+    const requestId = providerSelectionRequest.current + 1;
+    providerSelectionRequest.current = requestId;
     setStatus('Loading provider…');
     setProjectModels([]);
     try {
       const settings = await requestJson<ProviderSettingsView>(
         `/api/settings/provider?providerType=${encodeURIComponent(providerType)}`,
       );
+      if (intakeEpoch.current !== epoch || providerSelectionRequest.current !== requestId) return;
       const models = await loadProviderModels(providerType);
-      setProject({ ...project, providerSettings: {
-        providerType: settings.providerType,
-        baseUrl: settings.baseUrl,
-        model: settings.model,
-      } });
+      if (intakeEpoch.current !== epoch || providerSelectionRequest.current !== requestId) return;
+      setProject(current => current?.id === projectId ? { ...current, providerSettings: {
+        providerType: settings.providerType, baseUrl: settings.baseUrl, model: settings.model,
+      } } : current);
       setProjectProviderDirty(true);
       setProjectModels(models);
       setStatus('Provider selected; save generation inputs to apply');
     } catch (error) {
+      if (intakeEpoch.current !== epoch || providerSelectionRequest.current !== requestId) return;
       setError(message(error));
       setStatus('Provider unavailable');
     }
   };
 
   const filesSelected = async (files: FileList | null) => {
-    if (!files) return;
-    setError('');
+    if (!files || sourceUploadInFlight.current) return;
+    const epoch = intakeEpoch.current;
+    sourceUploadInFlight.current = true;
+    setSourceUploadBusy(true);
+    setError(''); setStatus('Analysing source files…');
     try {
       const sources: SourceArtifactInput[] = [];
       let intakeSessionId = intake.sources.find(source => source.kind === 'csv')?.csvAnalysis?.intakeSessionId ?? null;
       for (const file of [...files]) {
+        if (intakeEpoch.current !== epoch) return;
         const kind = sourceKind(file.name);
         if (!kind) throw new Error(`Unsupported file: ${file.name}`);
         if (kind === 'csv') {
-          const result = await requestCsvAnalysis(file, { projectId: project?.id, intakeSessionId });
+          const result = await requestCsvAnalysis(file, { name: file.name, projectId: project?.id, intakeSessionId });
+          if (intakeEpoch.current !== epoch) return;
           intakeSessionId = result.analysis.intakeSessionId;
-          sources.push({ name: file.name, kind, content: result.content, csvAnalysis: result.analysis });
+          sources.push({ clientId: crypto.randomUUID(), name: file.name, kind, content: result.content, csvAnalysis: result.analysis });
         } else {
-          sources.push({ name: file.name, kind, content: await file.text() });
+          sources.push({ clientId: crypto.randomUUID(), name: file.name, kind, content: await file.text() });
         }
       }
-      setIntake(current => ({ ...current, sources: [...current.sources, ...sources] }));
-    } catch (error) { setError(message(error)); }
+      if (intakeEpoch.current === epoch) {
+        setIntake(current => ({ ...current, sources: [...current.sources, ...sources] }));
+        setStatus('Source files ready');
+      }
+    } catch (error) {
+      if (intakeEpoch.current === epoch) {
+        setError(message(error));
+        setStatus('Source analysis failed');
+      }
+    }
+    finally {
+      if (intakeEpoch.current === epoch) {
+        sourceUploadInFlight.current = false;
+        setSourceUploadBusy(false);
+      }
+    }
   };
 
   const requestCsvAnalysis = async (
@@ -947,7 +1024,9 @@ export function ModelWorkbench() {
     },
   ) => {
     const form = new FormData();
-    form.set('file', file, options.name ?? (file instanceof File ? file.name : 'source.csv'));
+    const fileName = options.name ?? (file instanceof File ? file.name : '');
+    if (!fileName) throw new Error('source-invalid');
+    form.set('file', file, fileName);
     if (options.projectId) form.set('projectId', options.projectId);
     if (options.intakeSessionId) form.set('intakeSessionId', options.intakeSessionId);
     if (options.headerMode) form.set('headerMode', options.headerMode);
@@ -967,10 +1046,17 @@ export function ModelWorkbench() {
   ) => {
     const source = intake.sources[index];
     if (!source || source.kind !== 'csv') return;
+    if (!source.clientId) throw new Error('csv-analysis-required');
+    const clientId = source.clientId;
+    const sourceContent = source.content;
+    const epoch = intakeEpoch.current;
+    const requestId = (csvAnalysisRequests.current.get(clientId) ?? 0) + 1;
+    csvAnalysisRequests.current.set(clientId, requestId);
     const current = source.csvAnalysis;
+    setCsvAnalysisPending(pending => new Set(pending).add(clientId));
     setError(''); setStatus(confirmed ? 'Confirming CSV…' : 'Analysing CSV…');
     try {
-      const result = await requestCsvAnalysis(new Blob([source.content], { type: 'text/csv' }), {
+      const result = await requestCsvAnalysis(new Blob([sourceContent], { type: 'text/csv' }), {
         name: source.name,
         projectId: project?.id,
         intakeSessionId: current?.intakeSessionId
@@ -980,17 +1066,33 @@ export function ModelWorkbench() {
         additionalSensitiveColumns: changes.additionalSensitiveColumns ?? current?.additionalSensitiveColumns,
         confirmed,
       });
+      if (intakeEpoch.current !== epoch || csvAnalysisRequests.current.get(clientId) !== requestId) return;
       setIntake(value => ({
         ...value,
-        sources: value.sources.map((candidate, candidateIndex) => candidateIndex === index
+        sources: value.sources.map(candidate => candidate.clientId === clientId && candidate.content === sourceContent
           ? { ...candidate, content: result.content, csvAnalysis: result.analysis }
           : candidate),
       }));
       setStatus(result.analysis.confirmed ? 'CSV confirmed' : 'CSV ready for review');
-    } catch (error) { setError(message(error)); setStatus('CSV analysis failed'); }
+    } catch (error) {
+      if (intakeEpoch.current === epoch && csvAnalysisRequests.current.get(clientId) === requestId) {
+        setError(message(error)); setStatus('CSV analysis failed');
+      }
+    }
+    finally {
+      if (intakeEpoch.current === epoch && csvAnalysisRequests.current.get(clientId) === requestId) {
+        csvAnalysisRequests.current.delete(clientId);
+        setCsvAnalysisPending(pending => {
+          const next = new Set(pending);
+          next.delete(clientId);
+          return next;
+        });
+      }
+    }
   };
 
   const persistIntake = async () => {
+    const epoch = intakeEpoch.current;
     const target = project
       ? await requestJson<Project>(`/api/projects/${project.id}`, {
         method: 'PUT', headers: { 'content-type': 'application/json' },
@@ -999,7 +1101,8 @@ export function ModelWorkbench() {
       : await requestJson<Project>('/api/projects', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(intake),
       });
-    setProject(target); setIntake(projectIntake(target));
+    if (intakeEpoch.current !== epoch) return null;
+    setProject(target); setIntake(current => projectIntake(target, current.sources));
     setProjectProviderDirty(false);
     return target;
   };
@@ -1048,7 +1151,8 @@ export function ModelWorkbench() {
   const saveIntake = async () => {
     setError(''); setStatus(project ? 'Saving changes…' : 'Saving model…');
     try {
-      await persistIntake();
+      const target = await persistIntake();
+      if (!target) return;
       setStatus(project ? 'Changes saved' : 'Model saved');
       await refreshProjects();
     } catch (error) { setError(message(error)); setStatus('Save failed'); }
@@ -1066,13 +1170,17 @@ export function ModelWorkbench() {
         if (editRevision.current === revision) setDirty(false);
       }
       const target = await persistIntake();
+      if (!target) return;
+      const epoch = intakeEpoch.current;
       const job = await requestJson<GenerationJob>(`/api/projects/${target.id}/generation-jobs`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ clarification: null, retryOfJobId }),
       });
+      if (intakeEpoch.current !== epoch) return;
       setGenerationJob(job);
       setProviderActivity(activityFromJob(job));
-      void watchGenerationJob(job).catch(error => {
+      void watchGenerationJob(job, epoch).catch(error => {
+        if (intakeEpoch.current !== epoch) return;
         setError(message(error));
         stopProviderActivity('Generation status is unavailable. Reload to reconnect to the durable job.');
       });
@@ -1085,14 +1193,18 @@ export function ModelWorkbench() {
 
   const cancelGeneration = async () => {
     if (!generationJob || generationJob.status !== 'queued' && generationJob.status !== 'running') return;
+    const epoch = intakeEpoch.current;
+    const jobId = generationJob.id;
     setStatus('Cancelling generation…');
     try {
-      const cancelled = await requestJson<GenerationJob>(`/api/generation-jobs/${generationJob.id}`, { method: 'DELETE' });
+      const cancelled = await requestJson<GenerationJob>(`/api/generation-jobs/${jobId}`, { method: 'DELETE' });
+      if (intakeEpoch.current !== epoch) return;
       generationPoll.current += 1;
       setGenerationJob(cancelled);
       setProviderActivity(activityFromJob(cancelled));
       setStatus('Generation cancelled');
     } catch (error) {
+      if (intakeEpoch.current !== epoch) return;
       setError(message(error));
       setStatus('Cancellation failed');
     }
@@ -1100,14 +1212,23 @@ export function ModelWorkbench() {
 
   const removeProject = async () => {
     if (!project) return;
+    const epoch = intakeEpoch.current;
+    const projectId = project.id;
     const versionWarning = project.versions.length ? ` and its ${project.versions.length} saved version${project.versions.length === 1 ? '' : 's'}` : '';
     if (!window.confirm(`Delete “${project.title}”${versionWarning}? This cannot be undone.`)) return;
     setError(''); setStatus('Deleting model…');
     try {
-      await requestJson<void>(`/api/projects/${project.id}`, { method: 'DELETE' });
+      await requestJson<void>(`/api/projects/${projectId}`, { method: 'DELETE' });
+      if (intakeEpoch.current !== epoch) {
+        await refreshProjects();
+        return;
+      }
       setProject(null); setIntake(emptyDraft); setDirty(false); setStatus('Model deleted');
       await refreshProjects();
-    } catch (error) { setError(message(error)); setStatus('Delete failed'); }
+    } catch (error) {
+      if (intakeEpoch.current !== epoch) return;
+      setError(message(error)); setStatus('Delete failed');
+    }
   };
 
   const updateModel = (change: (model: CanonicalModel) => void) => {
@@ -1192,7 +1313,7 @@ export function ModelWorkbench() {
         });
         setDirty(false);
       }
-      if (generationInputsDirty) await persistIntake();
+      if (generationInputsDirty && !await persistIntake()) return;
       const updated = await requestProjectStream(`/api/projects/${project.id}/chat`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: outgoingMessage }),
         signal: operation.controller.signal,
@@ -1220,7 +1341,7 @@ export function ModelWorkbench() {
         });
         setDirty(false);
       }
-      await persistIntake();
+      if (!await persistIntake()) return;
       setStatus('Generation inputs saved');
       await refreshProjects();
     } catch (error) { setError(message(error)); setStatus('Generation inputs not saved'); }
@@ -1241,7 +1362,7 @@ export function ModelWorkbench() {
   const csvInputsConfirmed = intake.sources.every(source => source.kind !== 'csv' || source.csvAnalysis?.confirmed);
   const generationInputsDirty = Boolean(project?.draft && (
     intake.requirements !== project.requirements
-    || JSON.stringify(intake.sources) !== JSON.stringify(project.sources.map(({ name, kind, content, csvAnalysis }) => ({ name, kind, content, csvAnalysis })))
+    || JSON.stringify(intake.sources.map(sourceComparison)) !== JSON.stringify(project.sources.map(sourceComparison))
     || projectProviderDirty
   ));
   return <main className="app-shell">
@@ -1300,6 +1421,7 @@ export function ModelWorkbench() {
             onRetry={providerActivity.kind === 'generation' && !providerActivity.active && csvInputsConfirmed ? () => void generate(generationJob?.id ?? null) : undefined} />
         </> : !project || !project.draft ? <section className="panel intake-card">
           <div className="section-heading"><div><h2>{project ? 'Refine the intake before generation' : 'Start with what you know'}</h2><p>Incomplete requirements are expected. Save the model without contacting the configured provider, then generate when it is ready.</p></div><span className="status-dot" aria-live="polite">{status}</span></div>
+          <fieldset className="intake-fields" disabled={busy}><legend className="sr-only">Model intake</legend>
           <label>Model name<input aria-label="Model name" value={intake.title} onChange={event => setIntake({ ...intake, title: event.target.value })} placeholder="e.g. Claim Payment" /></label>
           <label>Requirements<textarea aria-label="Requirements" value={intake.requirements} onChange={event => setIntake({ ...intake, requirements: event.target.value })} placeholder="Describe the entities, relationships, rules and questions…" rows={8} /></label>
           {project && <div className="provider-fields">
@@ -1319,10 +1441,10 @@ export function ModelWorkbench() {
                 setProjectProviderDirty(true);
               }} />}</label>
           </div>}
-          <label className="file-drop"><span className="file-drop-title"><Icon name="plus" />Add source files</span><input aria-label="Source files" type="file" multiple accept=".md,.txt,.sql,.ddl,.json,.csv" onChange={event => void filesSelected(event.target.files)} />
+          <label className="file-drop"><span className="file-drop-title"><Icon name="plus" />Add source files</span><input aria-label="Source files" disabled={sourceUploadBusy} type="file" multiple accept=".md,.txt,.sql,.ddl,.json,.csv" onChange={event => void filesSelected(event.target.files)} />
             <span>Markdown, text, SQL, DDL, JSON or CSV · treated as inert data</span></label>
-          {intake.sources.length > 0 && <ul className="source-list">{intake.sources.map((source, index) => <li key={`${source.name}-${index}`}><span className="source-name">{source.name}<small>{source.kind}</small></span><button className="icon-button destructive" aria-label={`Remove source ${source.name}`} onClick={() => setIntake(current => ({ ...current, sources: current.sources.filter((_, candidate) => candidate !== index) }))}><Icon name="trash" /></button></li>)}</ul>}
-          {intake.sources.map((source, index) => source.kind === 'csv' && <CsvReview key={`csv-${source.name}-${index}`} source={source} disabled={busy}
+          {intake.sources.some(source => source.kind !== 'csv') && <ul className="source-list">{intake.sources.map((source, index) => source.kind !== 'csv' && <li key={source.clientId ?? `${source.name}-${index}`}><span className="source-name">{source.name}<small>{source.kind}</small></span><button className="icon-button destructive" aria-label={`Remove source ${source.name}`} onClick={() => setIntake(current => ({ ...current, sources: current.sources.filter((_, candidate) => candidate !== index) }))}><Icon name="trash" /></button></li>)}</ul>}
+          {intake.sources.map((source, index) => source.kind === 'csv' && <CsvReview key={source.clientId ?? `csv-${source.name}-${index}`} source={source} disabled={busy || csvAnalysisPending.has(source.clientId ?? '')}
             onHeadersChange={headers => setIntake(current => ({ ...current, sources: current.sources.map((candidate, candidateIndex) =>
               candidateIndex === index && candidate.csvAnalysis
                 ? { ...candidate, csvAnalysis: { ...candidate.csvAnalysis, headers, confirmed: false, confirmedAt: null } }
@@ -1334,15 +1456,21 @@ export function ModelWorkbench() {
               void analyseCsvSource(index, { additionalSensitiveColumns: [...columns] }, false);
             }}
             onConfirm={() => void analyseCsvSource(index, {}, true)}
-            onReanalyse={() => void analyseCsvSource(index)} />)}
+            onReanalyse={() => void analyseCsvSource(index)}
+            onRemove={() => setIntake(current => ({ ...current, sources: current.sources.filter((_, candidate) => candidate !== index) }))} />)}
           <div className="intake-actions">
             <button className="secondary-button" disabled={busy || !csvInputsAnalysed || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void saveIntake()}>{project ? 'Save changes' : 'Save model'}</button>
-            <button className="primary-button" disabled={busy || !csvInputsConfirmed || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void generate(retryOriginId)}>
-              {retryOriginId ? 'Retry with current inputs' : 'Generate draft'} <Icon name="arrow" />
-            </button>
+            {project
+              ? <button className="primary-button" disabled={busy || !csvInputsConfirmed || !intake.title.trim() || !intake.requirements.trim()} onClick={() => void generate(retryOriginId)}>
+                {retryOriginId ? 'Retry with current inputs' : 'Generate draft'} <Icon name="arrow" />
+              </button>
+              : <button className="primary-button" disabled title="Save the model to review its provider and model before generation">Save before generation</button>}
             {project && <button className="danger-button" disabled={busy} onClick={() => void removeProject()}>Delete model</button>}
-            <span>Save makes no provider call. Generate sends the current intake to the configured provider.</span>
+            <span>{project
+              ? `Generate sends the current intake to ${providerLabels[project.providerSettings.providerType]} using ${project.providerSettings.model}.`
+              : 'Save the model first to review and select the provider destination before generation.'}</span>
           </div>
+          </fieldset>
         </section> : <>
           <section className="panel model-header">
             <div><h1>{project.draft.model.name} model</h1><p>{project.draft.model.businessDefinition}</p></div>
@@ -1431,28 +1559,11 @@ export function ModelWorkbench() {
                   }} /></label>}
                 </div>
                 <label>Persistent model requirements<textarea aria-label="Persistent model instructions" disabled={generationLocked} value={intake.requirements} maxLength={20_000} rows={7} onChange={event => setIntake({ ...intake, requirements: event.target.value })} /></label>
-                <div className="attachment-heading"><div><strong>Source attachments</strong><span>CSV files are profiled and masked before provider use.</span></div>
-                  <label className="compact-file-button">Add files<input aria-label="Add generation source files" disabled={generationLocked} type="file" multiple accept=".md,.txt,.sql,.ddl,.json,.csv" onChange={event => void filesSelected(event.target.files)} /></label>
+                <div className="attachment-heading"><div><strong>Source attachments</strong><span>CSV samples are sent unchanged unless you mark columns sensitive.</span></div>
+                  <label className="compact-file-button">Add files<input aria-label="Add generation source files" disabled={generationLocked || sourceUploadBusy} type="file" multiple accept=".md,.txt,.sql,.ddl,.json,.csv" onChange={event => void filesSelected(event.target.files)} /></label>
                 </div>
-                <div className="attachment-editors">{intake.sources.length ? intake.sources.map((source, index) => <article className="attachment-editor" key={`${source.name}-${index}`}>
-                  <div><strong>{source.name}</strong><span>{source.kind}</span><button className="icon-button destructive" disabled={generationLocked} type="button" aria-label={`Remove source ${source.name}`} onClick={() => setIntake(current => ({
-                    ...current, sources: current.sources.filter((_, candidate) => candidate !== index),
-                  }))}><Icon name="trash" /></button></div>
-                  <textarea aria-label={`Source content ${source.name}`} disabled={generationLocked} value={source.content} rows={8} onChange={event => setIntake(current => ({
-                    ...current,
-                    sources: current.sources.map((item, candidate) => candidate === index
-                      ? {
-                        ...item,
-                        content: event.target.value,
-                        ...(item.kind === 'csv' ? {
-                          csvAnalysis: item.csvAnalysis
-                            ? { ...item.csvAnalysis, contentDigest: '', confirmed: false, confirmedAt: null }
-                            : null,
-                        } : {}),
-                      }
-                      : item),
-                  }))} />
-                  {source.kind === 'csv' && <CsvReview source={source} disabled={generationLocked}
+                <div className="attachment-editors">{intake.sources.length ? intake.sources.map((source, index) => source.kind === 'csv'
+                  ? <CsvReview key={source.clientId ?? `${source.name}-${index}`} source={source} disabled={generationLocked || csvAnalysisPending.has(source.clientId ?? '')}
                     onHeadersChange={headers => setIntake(current => ({ ...current, sources: current.sources.map((candidate, candidateIndex) =>
                       candidateIndex === index && candidate.csvAnalysis
                         ? { ...candidate, csvAnalysis: { ...candidate.csvAnalysis, headers, confirmed: false, confirmedAt: null } }
@@ -1464,8 +1575,29 @@ export function ModelWorkbench() {
                       void analyseCsvSource(index, { additionalSensitiveColumns: [...columns] }, false);
                     }}
                     onConfirm={() => void analyseCsvSource(index, {}, true)}
-                    onReanalyse={() => void analyseCsvSource(index)} />}
-                </article>) : <p className="empty-copy">No source attachments. Requirements alone will be sent.</p>}</div>
+                    onReanalyse={() => void analyseCsvSource(index)}
+                    onContentChange={content => setIntake(current => ({
+                      ...current,
+                      sources: current.sources.map((item, candidate) => candidate === index
+                        ? {
+                          ...item,
+                          content,
+                          csvAnalysis: item.csvAnalysis
+                            ? { ...item.csvAnalysis, contentDigest: '', confirmed: false, confirmedAt: null }
+                            : null,
+                        }
+                        : item),
+                    }))}
+                    onRemove={() => setIntake(current => ({ ...current, sources: current.sources.filter((_, candidate) => candidate !== index) }))} />
+                  : <article className="attachment-editor" key={`${source.name}-${index}`}>
+                    <div><strong>{source.name}</strong><span>{source.kind}</span><button className="icon-button destructive" disabled={generationLocked} type="button" aria-label={`Remove source ${source.name}`} onClick={() => setIntake(current => ({
+                      ...current, sources: current.sources.filter((_, candidate) => candidate !== index),
+                    }))}><Icon name="trash" /></button></div>
+                    <textarea aria-label={`Source content ${source.name}`} disabled={generationLocked} value={source.content} rows={8} onChange={event => setIntake(current => ({
+                      ...current,
+                      sources: current.sources.map((item, candidate) => candidate === index ? { ...item, content: event.target.value } : item),
+                    }))} />
+                  </article>) : <p className="empty-copy">No source attachments. Requirements alone will be sent.</p>}</div>
                 <div className="model-instructions-actions"><p>Saving these inputs makes no provider call. Every new job snapshots them for audit and retry.</p><button className="secondary-button" disabled={busy || !csvInputsAnalysed || !generationInputsDirty || !intake.requirements.trim()} onClick={() => void saveGenerationInputs()}>{generationInputsDirty ? 'Save generation inputs' : 'Generation inputs saved'}</button></div>
               </div>
             </details>

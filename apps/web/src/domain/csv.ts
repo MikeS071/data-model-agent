@@ -95,20 +95,6 @@ function formats(values: string[]) {
   return [...detected].sort();
 }
 
-function sensitivity(name: string, values: string[], detectedFormats: string[]) {
-  const normalized = normalizedName(name);
-  const categories = new Set<string>();
-  if (/(?:^|_)(?:full_?)?name(?:_|$)|first_name|last_name|surname/iu.test(normalized)) categories.add('name');
-  if (/email/iu.test(normalized) || detectedFormats.includes('email')) categories.add('email');
-  if (/phone|mobile|telephone/iu.test(normalized) || detectedFormats.includes('phone')) categories.add('phone');
-  if (/address|street|suburb|postcode|postal/iu.test(normalized)) categories.add('address');
-  if (/date_of_birth|birth_date|dob/iu.test(normalized)) categories.add('birth-date');
-  if (/(?:^|_)(?:id|identifier|account|member|customer|claim|policy|licen[cs]e|vin|reference|number|no)(?:_|$)/iu.test(normalized)
-    || detectedFormats.includes('uuid')) categories.add('identifier');
-  if (/card|pan/iu.test(normalized) || detectedFormats.includes('payment-card') || values.some(luhn)) categories.add('payment-card');
-  return [...categories].sort();
-}
-
 function inferHeaderMode(rows: string[][]): CsvHeaderMode {
   const first = rows[0] ?? [];
   if (!first.length || first.some(value => !nonEmpty(value))) return 'generated';
@@ -193,9 +179,7 @@ export function analyzeCsvContent(content: string, options: CsvAnalysisOptions):
     const values = dataRows.map(row => row[index] ?? '');
     const populated = values.filter(nonEmpty);
     const detectedFormats = formats(populated);
-    const detectedSensitivity = sensitivity(name, populated, detectedFormats);
-    if (headerMode === 'generated') detectedSensitivity.push('headerless');
-    if (manualSensitive.has(index)) detectedSensitivity.push('manual');
+    const detectedSensitivity = manualSensitive.has(index) ? ['manual'] : [];
     const lengths = populated.map(value => value.length);
     return {
       index,

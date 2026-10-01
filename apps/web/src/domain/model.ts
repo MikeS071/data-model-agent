@@ -41,6 +41,7 @@ export interface CsvAnalysis {
 }
 
 export interface SourceArtifactInput {
+  clientId?: string;
   name: string;
   kind: SourceKind;
   content: string;

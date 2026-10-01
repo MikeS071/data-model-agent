@@ -28,9 +28,9 @@ describe('CSV analysis boundary', () => {
     expect(draft.inferredHeaderMode).toBe('generated');
     expect(draft.headers).toEqual(['column_1', 'column_2']);
     expect(draft.confirmed).toBe(false);
-    expect(draft.columns.every(column => column.sensitive && column.sensitivity.includes('headerless'))).toBe(true);
-    expect(JSON.stringify(draft.sampleRows)).not.toContain('Alice');
-    expect(JSON.stringify(draft.sampleRows)).not.toContain('Bob');
+    expect(draft.columns.every(column => !column.sensitive && column.sensitivity.length === 0)).toBe(true);
+    expect(JSON.stringify(draft.sampleRows)).toContain('Alice');
+    expect(JSON.stringify(draft.sampleRows)).toContain('Bob');
 
     const confirmed = analyzeCsvContent('Alice,10\nBob,20\n', {
       ...options,
@@ -45,12 +45,13 @@ describe('CSV analysis boundary', () => {
 
   it('uses stable project-scoped pseudonyms while preventing cross-project correlation', () => {
     const content = 'customer_id,email,amount\n123,a@example.com,10\n123,a@example.com,20\n';
-    const first = analyzeCsvContent(content, { ...options, confirmed: true });
-    const sameProject = analyzeCsvContent(content, { ...options, intakeSessionId: null, confirmed: true });
+    const first = analyzeCsvContent(content, { ...options, additionalSensitiveColumns: [0, 1], confirmed: true });
+    const sameProject = analyzeCsvContent(content, { ...options, intakeSessionId: null, additionalSensitiveColumns: [0, 1], confirmed: true });
     const otherProject = analyzeCsvContent(content, {
       ...options,
       key: new Uint8Array(32).fill(9),
       maskingGenerationId: 'generation-2',
+      additionalSensitiveColumns: [0, 1],
       confirmed: true,
     });
 

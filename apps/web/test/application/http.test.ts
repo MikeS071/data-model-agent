@@ -39,16 +39,19 @@ describe('project HTTP boundary', () => {
     const draft = await first.json();
     expect(draft.analysis.confirmed).toBe(false);
     expect(draft.analysis.intakeSessionId).toEqual(expect.any(String));
-    expect(JSON.stringify(draft.analysis)).not.toContain('a@example.com');
+    expect(JSON.stringify(draft.analysis)).toContain('a@example.com');
 
     const confirmation = new FormData();
     confirmation.set('file', new Blob([draft.content], { type: 'text/csv' }), 'customers.csv');
     confirmation.set('intakeSessionId', draft.analysis.intakeSessionId);
     confirmation.set('headerMode', draft.analysis.headerMode);
     confirmation.set('headers', JSON.stringify(draft.analysis.headers));
+    confirmation.set('additionalSensitiveColumns', JSON.stringify([0, 1]));
     confirmation.set('confirmed', 'true');
     const confirmed = await analyzeCsv(new Request('http://local/api/csv-analysis', { method: 'POST', body: confirmation }), service);
-    expect((await confirmed.json()).analysis.confirmed).toBe(true);
+    const confirmedBody = await confirmed.json();
+    expect(confirmedBody.analysis.confirmed).toBe(true);
+    expect(JSON.stringify(confirmedBody.analysis)).not.toContain('a@example.com');
     repository.close();
   });
 

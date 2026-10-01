@@ -61,9 +61,11 @@ inert text and are never executed. Provider responses are validated before they 
 the saved working draft.
 
 CSV files remain local source artifacts. Before generation, the server infers and profiles
-columns, selects at most 100 deterministic distributed rows, and masks likely personal
-data with project-scoped pseudonyms. Users confirm or correct the inferred headers; raw
-CSV content is never added to provider requests or durable generation-job snapshots.
+columns and selects at most 100 deterministic distributed rows. Sampled values are
+provider-bound and unchanged by default; users explicitly mark columns that should use
+project-scoped pseudonyms. Users confirm or correct the inferred headers and exact sample;
+complete raw CSV content is never added to provider requests or durable generation-job
+snapshots.
 
 ## Technology
 
@@ -203,7 +205,8 @@ by the settings UI.
 
 1. Select **New model**, enter a model name and describe the domain in **Requirements**.
 2. Attach any relevant Markdown, schema, SQL, DDL, JSON or CSV files.
-   Review each CSV's inferred headers, column profiles and masked sample, then confirm it.
+   Review each CSV's inferred headers, column profiles and provider-bound sample, mark any
+   columns that should be masked, then confirm it.
 3. Choose **Save model** to keep the intake without contacting the provider, or
    **Generate draft** to create the first canonical model.
 4. Follow the durable generation job's phases, elapsed time, heartbeat and provider transcript.

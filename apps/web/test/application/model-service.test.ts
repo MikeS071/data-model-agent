@@ -99,6 +99,7 @@ describe('model application service', () => {
       intakeSessionId: draft.analysis.intakeSessionId,
       headerMode: draft.analysis.headerMode,
       headers: draft.analysis.headers,
+      additionalSensitiveColumns: [0, 1],
       confirmed: true,
     });
     const project = await service.createAndGenerate({
