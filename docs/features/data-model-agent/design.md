@@ -1,10 +1,10 @@
 ---
 kind: design
 version: 1
-revision: 15
+revision: 16
 status: accepted
 slug: data-model-agent
-requestRevision: 4
+requestRevision: 5
 ---
 
 # Data-modelling agent design
@@ -43,8 +43,10 @@ Add `csv` to `SourceKind`, but keep the original CSV content local and distinct 
 provider-safe analysis. A server-only CSV analyser uses the maintained `csv-parse`
 library in strict record-width mode. It accepts UTF-8 with an optional byte-order mark,
 RFC-style quoted fields, escaped quotes, embedded commas and embedded line breaks.
-Existing 1 MB per-file and 5 MB aggregate source limits still apply; additional row and
-column ceilings bound parser work before profiling.
+Non-CSV source kinds retain a 1 MB per-file limit. CSV uses a dedicated 10 MB per-file
+limit, and normalized content across every attachment is capped at 50 MB. Parser-time row
+and column ceilings bound CSV work before profiling even when the byte limit permits a
+larger extract.
 
 Attaching or editing a CSV calls an analysis route that persists only masking-session
 state and shows a review card in the
@@ -399,6 +401,13 @@ Treat every upload as inert data, enforce per-file and aggregate size limits, no
 line endings, and reject binaries or malformed encodings. Never execute supplied DDL,
 HTML, scripts or spreadsheet formulas.
 
+The shared source normalizer selects its per-file byte limit from source kind: 1,000,000
+bytes for text/Markdown/SQL/DDL/JSON and 10,000,000 bytes for CSV. It sums normalized
+UTF-8 bytes for all sources and rejects totals above 50,000,000 bytes. The multipart CSV
+analysis boundary enforces the same 10,000,000-byte CSV limit before decoding; the parser
+record-size ceiling uses that value while `on_record` still aborts excessive rows,
+columns or inconsistent widths during parsing.
+
 The browser sends CSV bytes to `POST /api/csv-analysis` as multipart data rather than
 decoding them with `File.text()`. The server performs fatal UTF-8 decoding, strips an
 optional BOM, parses with explicit comma delimiter and strict column counts, applies row/
@@ -507,6 +516,9 @@ No key plus no CSV analysis state triggers one-time transactional initialization
 project's first CSV. Retry remains disabled while any current CSV is unconfirmed, flushes
 all other valid current edits through the normal generation preflight, and leaves the
 older job snapshot audit-only.
+`source-too-large` identifies a source exceeding its kind-specific limit, while
+`sources-too-large` identifies aggregate normalized attachment bytes above 50 MB. The UI
+explains both limits and remains editable after rejection so users can remove/split files.
 
 Malformed or schema-invalid model output is never stored as a canonical model; validation
 details become a bounded error and may drive a new generation attempt. Domain ambiguity
@@ -524,6 +536,9 @@ entities, attributes, keys, optionality, cardinality, definitions, layout and ag
 rules. Input tests cover prose, Markdown, DDL, SQL, JSON, encoding, size limits and the
 rule that DDL is never executed. CSV parser tests cover BOM, quoting, embedded delimiters/
 newlines, escaped quotes, malformed input, strict widths, encoding and resource limits.
+Boundary tests accept exact 1 MB non-CSV, 10 MB CSV and 50 MB aggregate inputs and reject
+each at one byte over. Multipart analysis and project save use the same byte fixtures so
+no route can apply a different CSV limit.
 Profiling tests use literal fixtures for type/format/null/uniqueness inference, stable
 distributed indexes at row counts below/equal/above 100, unchanged unmarked values,
 user-marked pseudonym equality and cross-project unlinkability. A fixture larger than
@@ -646,15 +661,17 @@ by reanalysis/reconfirmation.
 | D-040 | Distinguish active-job resume from Retry, which runs normal current-input persistence/validation and creates a linked new job. | Replaying an old CSV interpretation or omitting unsaved edits would conflict with current UI semantics. | Replay prior request JSON; use only saved inputs; silently choose a path. | Retry flushes valid edits, is disabled for unconfirmed CSV, is labelled clearly and stores `retry_of_job_id`; old snapshots remain audit-only. |
 | D-041 | Bind every analysis/confirmation to a masking-key generation, lazily initialize only a project's first key, and invalidate all CSV confirmations on rotation/loss. | Mixing pseudonym namespaces silently destroys cross-file equality, while migrated projects need a defined first-use path. | Backfill every project; bind only source/analysis version; regenerate missing keys silently. | First use is transactional only with no CSV state; rotation is transactional, missing keys with existing state block provider context, and reconfirmation is mandatory. |
 | D-042 | Require a verified v7 backup for rollback, add an unknown-schema guard before v8 writes and test a populated v7-to-v8 migration. | A pre-feature binary cannot be retroactively prevented from writing a newer database. | Claim older binaries can safely reuse v8; omit migration fixtures. | Rollback restores backup, future versions gain compatibility checks, and existing data preservation is proven. |
+| D-043 | Use kind-specific file limits of 1 MB for non-CSV and 10 MB for CSV with a 50 MB normalized aggregate cap. | CSV extracts need materially more capacity than prose/schema sources while the local unauthenticated parser still needs deterministic memory bounds. | Keep 1/5 MB limits; allow 25/100 MB; rely only on row/column limits. | Analysis and persistence share constants; parser-time row/column limits remain and boundary tests cover exact/over-limit values. |
 
 ## Approval
 
-Status: accepted. On 2026-10-01, Michal accepted design revision 15 for request revision 4,
-removing automatic sensitivity detection, leaving sampled values unchanged by default,
-and pseudonymizing only columns explicitly marked sensitive by the user. Existing
-intake-key, confirmation, retry, lineage and migration decisions remain unchanged.
+Status: accepted. On 2026-10-02, Michal accepted design revision 16 for request revision 5
+with a 10 MB CSV file limit, 1 MB non-CSV file limit and 50 MB normalized aggregate limit
+in D-043. Parser-time row/column ceilings and every other accepted CSV decision remain
+unchanged.
 
-Historical approvals: On 2026-10-01, Michal accepted design revision 14 for request
+Historical approvals: On 2026-10-01, Michal accepted design revision 15 for request
+revision 4 with manual-only masking. On 2026-10-01, Michal accepted design revision 14 for request
 revision 3 after implementation-readiness review, then changed the masking requirement
 after automatic classification proved too broad. On 2026-10-01, Michal accepted design revision 13 for request
 revision 3 with D-031 through D-038. A subsequent implementation-readiness review found
