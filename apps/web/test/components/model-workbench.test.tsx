@@ -85,8 +85,11 @@ describe('Michal modelling workflow', () => {
       { type: 'text/csv' },
     ));
 
-    const csvReview = await screen.findByRole('region', { name: 'CSV review customers.csv' });
+    const csvReview = await screen.findByRole('region', { name: 'CSV review customers.csv' }) as HTMLDetailsElement;
     expect(csvReview).toBeTruthy();
+    expect(csvReview.open).toBe(false);
+    await user.click(csvReview.querySelector('summary')!);
+    expect(csvReview.open).toBe(true);
     expect(screen.getByText('<masked:def>')).toBeTruthy();
     expect((screen.getByRole('button', { name: /Generate draft/u }) as HTMLButtonElement).disabled).toBe(true);
     await user.click(screen.getByRole('button', { name: 'Confirm CSV' }));
@@ -145,6 +148,9 @@ describe('Michal modelling workflow', () => {
     });
     expect(await screen.findByText('CSV review required')).toBeTruthy();
     expect((screen.getByRole('button', { name: /Regenerate with changes/u }) as HTMLButtonElement).disabled).toBe(true);
+    const csvReview = screen.getByRole('region', { name: 'CSV review customers.csv' }) as HTMLDetailsElement;
+    expect(csvReview.open).toBe(false);
+    await user.click(csvReview.querySelector('summary')!);
     await user.click(screen.getByRole('button', { name: 'Analyse CSV' }));
     await user.click(await screen.findByRole('button', { name: 'Confirm CSV' }));
     await waitFor(() => expect(screen.getByRole('region', { name: 'CSV review customers.csv' }).textContent).toContain('CSV confirmed'));

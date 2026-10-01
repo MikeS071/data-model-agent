@@ -248,17 +248,18 @@ function CsvReview({
   onReanalyse: () => void;
 }) {
   const analysis = source.csvAnalysis;
-  if (!analysis || !analysis.contentDigest) return <section className="csv-review needs-review" aria-label={`CSV review ${source.name}`}>
-    <div><strong>CSV review required</strong><span>The file changed or has not been analysed.</span></div>
-    <button className="secondary-button" type="button" disabled={disabled} onClick={onReanalyse}>Analyse CSV</button>
-  </section>;
-  return <section className={`csv-review${analysis.confirmed ? ' confirmed' : ' needs-review'}`} aria-label={`CSV review ${source.name}`}>
-    <div className="csv-review-heading">
+  if (!analysis || !analysis.contentDigest) return <details className="csv-review needs-review" role="region" aria-label={`CSV review ${source.name}`}>
+    <summary className="csv-review-heading"><div><strong>CSV review required</strong><span>The file changed or has not been analysed.</span></div>
+      <span className="count-badge">Review</span></summary>
+    <div className="csv-review-body"><button className="secondary-button" type="button" disabled={disabled} onClick={onReanalyse}>Analyse CSV</button></div>
+  </details>;
+  return <details className={`csv-review${analysis.confirmed ? ' confirmed' : ' needs-review'}`} role="region" aria-label={`CSV review ${source.name}`}>
+    <summary className="csv-review-heading">
       <div><strong>{analysis.confirmed ? 'CSV confirmed' : 'Confirm CSV interpretation'}</strong>
         <span>{analysis.rowCount.toLocaleString()} rows · {analysis.columnCount} columns · sample {analysis.sampleRows.length} rows</span></div>
       <span className="count-badge">{analysis.confirmed ? 'Confirmed' : 'Review'}</span>
-    </div>
-    <label>Header interpretation<select value={analysis.headerMode} disabled={disabled} onChange={event => onHeaderModeChange(event.target.value as CsvHeaderMode)}>
+    </summary>
+    <div className="csv-review-body"><label>Header interpretation<select value={analysis.headerMode} disabled={disabled} onChange={event => onHeaderModeChange(event.target.value as CsvHeaderMode)}>
       <option value="first-row">First row contains headers</option>
       <option value="generated">Generate column names; first row is data</option>
     </select></label>
@@ -293,7 +294,8 @@ function CsvReview({
       <button className={analysis.confirmed ? 'secondary-button' : 'primary-button'} type="button" disabled={disabled} onClick={onConfirm}>
         {analysis.confirmed ? 'Reconfirm CSV' : 'Confirm CSV'}
       </button></div>
-  </section>;
+    </div>
+  </details>;
 }
 
 function MermaidPreview({ source, onRendered }: { source: string; onRendered?: (ready: boolean) => void }) {
