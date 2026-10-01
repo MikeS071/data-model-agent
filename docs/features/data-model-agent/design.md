@@ -1,10 +1,10 @@
 ---
 kind: design
 version: 1
-revision: 11
+revision: 12
 status: accepted
 slug: data-model-agent
-requestRevision: 1
+requestRevision: 2
 ---
 
 # Data-modelling agent design
@@ -13,10 +13,12 @@ requestRevision: 1
 
 Michal needs a single-user pilot for developing insurance data models from free-form
 requirements and text-based technical artifacts. The application must turn uncertain
-inputs into an explicit draft, preserve the supplied sources, provide structured editing,
-and keep Mermaid and draw.io outputs semantically aligned. The pilot may handle sensitive
-organisational information, sends supplied content to OpenAI when generation is requested,
-and persists its state locally. It is not a production, multi-user or deployed service.
+inputs into an explicit draft, preserve and edit the supplied sources, provide structured
+editing, and keep Mermaid and draw.io outputs semantically aligned. The pilot may handle
+sensitive organisational information, sends supplied content only to the provider
+selected for the project when generation or chat is requested, and persists its state
+locally. Long provider calls must remain observable and recoverable. It is not a
+production, multi-user or deployed service.
 
 ## Chosen approach
 
@@ -26,13 +28,32 @@ route handlers call application services through server-only boundaries.
 
 The domain layer owns a validated canonical model. An input normalizer treats prose,
 Markdown, DDL, SQL, JSON and schema files as inert text and creates a bounded generation
-context. A replaceable model-provider interface uses the OpenAI Responses API in the real
-adapter and a deterministic fake in tests. The provider is asked for structured JSON;
-the application validates the response again before it can become a working draft.
-`OPENAI_API_KEY` remains a server environment secret. A Settings view lets Michal choose
-the non-secret base URL and model for an OpenAI-compatible Responses API; those values are
-validated at the server boundary and stored locally so provider choice does not require a
-source edit or expose the credential to browser code.
+context. A replaceable model-provider interface selects an OpenAI Responses API adapter,
+GitHub Copilot SDK adapter or VS Code language-model bridge adapter; deterministic fakes
+remain available in tests. The provider is asked for structured JSON and the application
+validates the complete response again before it can become a working draft.
+`OPENAI_API_KEY` remains a server environment secret. The Settings view chooses a global
+default provider and model. Each project stores its own non-secret provider/model
+selection, initialized from that default, so existing projects do not silently change
+destination when the global default changes.
+
+The VS Code adapter uses a companion extension and only the public `vscode.lm` API. The
+extension writes a user-local connection record containing a random named-pipe address
+and 256-bit bearer token, accepts bounded versioned protocol messages, requires an
+explicit user-initiated app request, exposes no tools, rejects permission requests and
+never extracts or forwards provider credentials. The server verifies the protocol and
+token, requests the selected model, and maps quota, timeout and unavailable-runtime
+failures into typed application errors. The GitHub Copilot SDK adapter remains an
+alternative when its supported runtime can execute.
+
+Generation runs through SQLite-backed jobs rather than the lifetime of one browser
+request. A job snapshots the requirements, source documents, current model and selected
+provider/model; progresses through queued, running, receiving and validating phases;
+records a bounded transcript and three-second heartbeat; and finishes as completed,
+failed, cancelled or interrupted. The browser starts a job and polls its durable state.
+Reloading resumes that view. Process restart and stale heartbeat recovery mark unfinished
+work interrupted and offer an explicit retry. Partial provider output is activity only:
+one atomic save replaces the working draft after complete schema and domain validation.
 
 Use Node's SQLite support behind a repository interface. One mutable working draft is
 autosaved transactionally. An explicit Save Version action creates an immutable snapshot
@@ -56,25 +77,27 @@ flushes unsaved instruction edits before Regenerate or Send message so a provide
 cannot use stale requirements. Updating these instructions does not itself call the
 provider or rewrite the canonical model.
 
-After a working draft exists, a project-scoped chat shares the top of the workbench with
-the live model output. Each user message is sent with the current canonical model, the
-next unresolved clarification when one exists, and bounded recent conversation context.
+After a working draft exists, a project-scoped chat opens from the fixed lower-left bubble
+over the live model workbench. Each user message is sent with the current canonical model,
+the next unresolved clarification when one exists, and bounded recent conversation context.
 Clarifications are ordinary guided chat turns rather than a separate form: answering the
 question asks the provider to update the model and advance or clear the clarification
 queue. The provider returns both a concise assistant reply and a complete proposed
 canonical draft under structured output; local validation must pass before the draft and
 both chat messages are saved together. The structured editor remains the authoritative,
-directly editable view below the collaboration row, so conversational changes are
+directly editable view below the live model output, so conversational changes are
 immediately visible in the model output and editor.
 
 Use the project-local UI/UX Pro Max output in
 `design-system/data-model-agent/MASTER.md` as the visual interaction contract. Present the
 application as a calm, data-dense enterprise workbench rather than a marketing page. A
 compact product header exposes local-pilot and save state. Its Model Foundry brand returns
-to the home intake and is labelled as the Data Model Design Space. Desktop places live model
-output and project chat side by side at the top, followed by the full-width structured
-editor and history; assumptions and warnings form the final review section. Smaller
-screens stack those regions in the same reading order without horizontal page scroll.
+to the home intake and is labelled as the Data Model Design Space. Desktop gives the live
+model output the top workbench area, followed by the full-width
+structured editor and history; assumptions and warnings form the final review section.
+Project chat is a viewport-fixed lower-left bubble that opens a bounded panel above itself
+without moving the workbench. Smaller screens retain the same content order without
+horizontal page scroll.
 The saved-model workspace is a keyboard-operable collapsible sidebar: collapsing it leaves
 an icon rail and gives the workbench and live output the recovered width. Settings is a
 first-class sidebar destination rather than a hidden environment-only task.
@@ -100,6 +123,16 @@ Transcript rows retain their content height instead of shrinking to fit the view
 their combined height exceeds the bounded message area, that area scrolls independently
 and the newest turn is brought into view. Scrolling a long message body can hand off to
 transcript scrolling at its boundary rather than trapping the wheel.
+
+The Model representations title sits above one horizontally scrollable toolbar containing
+status, Mermaid/draw.io selection, zoom/reset, Copy, Export PDF, Regenerate, Save version
+and Delete. The canvas follows immediately with no explanatory copy. Copy and Export PDF
+always use a dedicated off-screen rendering of the Mermaid source, never the draw.io
+preview or its layout, regardless of the selected preview tab. Mermaid renders native SVG
+text rather than XHTML `foreignObject` labels so clipboard/PDF rasterization cannot taint
+the canvas. PDF export adds the Mermaid image and paginated descriptions of every entity,
+attribute, relationship, validation rule, assumption and warning. Entities, assumptions
+and warnings use native disclosures and are collapsed initially.
 
 Sending a chat message creates a transient user bubble immediately and clears the
 composer for the next thought. A separate assistant bubble with an atomic polite
@@ -130,10 +163,16 @@ flowchart LR
   Michal[Michal] --> UI[Next.js browser UI]
   UI --> Routes[Server route handlers]
   Routes --> Service[Application services]
+  Routes --> Jobs[Durable generation-job manager]
+  Jobs --> Service
   Service --> Domain[Canonical model and validation]
-  Service --> Provider[Model provider interface]
-  Provider --> Compatible[Configured OpenAI-compatible Responses API]
+  Service --> Provider[Model-provider factory]
+  Provider --> OpenAI[OpenAI Responses API]
+  Provider --> CopilotSDK[GitHub Copilot SDK]
+  Provider --> Bridge[Authenticated named-pipe bridge]
+  Bridge --> VSCode[VS Code extension / vscode.lm]
   Service --> Repo[Repository interface]
+  Jobs --> Repo
   Repo --> SQLite[(Local SQLite)]
   Service --> Mermaid[Mermaid renderer]
   Service --> Drawio[draw.io XML renderer]
@@ -148,16 +187,24 @@ sequenceDiagram
   actor Michal
   participant UI as Browser UI
   participant App as Next.js server
-  participant AI as Configured compatible provider
+  participant Job as Durable generation job
+  participant AI as Project-selected provider
   participant Domain as Domain validator
   participant DB as SQLite repository
-  Michal->>UI: Enter requirements and attach text artifacts
-  UI->>App: Generate model
-  App->>AI: Normalized sources and canonical JSON schema
-  AI-->>App: Structured candidate and clarification items
-  App->>Domain: Validate candidate and domain invariants
-  Domain-->>App: Valid draft or typed validation failure
-  App->>DB: Autosave working draft and source material
+  Michal->>UI: Edit requirements, sources, provider and model
+  UI->>App: Save inputs and start generation
+  App->>DB: Persist inputs and immutable job snapshot
+  App-->>UI: 202 Accepted with job ID
+  App->>Job: Run queued job
+  Job->>AI: Normalized snapshot and canonical JSON schema
+  AI-->>Job: Progress and structured-output fragments
+  Job->>DB: Heartbeat, phase and bounded transcript
+  UI->>App: Poll job after reload or navigation
+  App-->>UI: Current durable activity
+  AI-->>Job: Complete structured candidate
+  Job->>Domain: Parse and validate complete candidate
+  Domain-->>Job: Valid draft or typed validation failure
+  Job->>DB: Atomically save draft and complete job
   App-->>UI: Draft, assumptions, warnings and next question
   Michal->>UI: Answer clarification or request a change in chat
   UI->>App: Message plus current project context
@@ -170,7 +217,7 @@ sequenceDiagram
   UI->>App: Autosave edited draft
   Michal->>UI: Save Version
   App->>DB: Commit immutable snapshot
-  App-->>UI: Mermaid and draw.io previews and downloads
+  App-->>UI: Mermaid/draw.io previews, Mermaid image copy and PDF
 ```
 
 ## Domain model
@@ -196,9 +243,11 @@ edges.
 
 ## Storage model
 
-Use a project-local SQLite file excluded from Git. Versioned SQL migrations create six
-tables: projects, source_artifacts, working_drafts, model_messages, model_versions and
-provider_settings. Canonical models, clarification state and generated representations are stored as validated JSON or text;
+Use a project-local SQLite file excluded from Git. Versioned SQL migrations create
+projects, source artifacts, working drafts, model messages, model versions, provider
+settings, application defaults, project-provider selections and generation jobs.
+Canonical models, clarification state and generated representations are stored as
+validated JSON or text;
 timestamps and version numbers are ordinary indexed columns. Foreign keys enforce project
 ownership, and `(project_id, version_number)` is unique.
 
@@ -211,10 +260,18 @@ Project chat messages use ordered user/assistant roles and cascade with project 
 A successful chat turn writes its two messages and revised working draft in one
 transaction; provider or validation failure writes neither.
 
-A singleton `provider_settings` row stores only the normalized OpenAI-compatible base URL,
-model name and update timestamp. Environment values supply the initial fallback until the
-user saves settings. The API key is never part of that row. Updating provider settings is
-an idempotent upsert and does not modify projects, drafts, messages or versions.
+Provider settings store only normalized non-secret base URLs, provider types, model names
+and update timestamps. Environment values supply initial fallbacks until the user saves a
+default. A project-provider row snapshots that project's selection independently of the
+global default. API keys and VS Code bridge tokens are never part of those rows. Updating
+settings is an idempotent upsert and does not modify drafts, messages or versions.
+
+Each `generation_jobs` row owns a project, provider/model and request snapshot, status,
+phase, message, bounded transcript, typed error and lifecycle timestamps including the
+latest heartbeat. Creating a job is rejected while that project has queued or running
+work. Completion validates and saves the draft before marking the job complete.
+Cancellation and interruption never apply partial transcript output to the canonical
+model.
 
 ## External boundaries
 
@@ -223,16 +280,20 @@ every upload as inert UTF-8 text, enforce per-file and aggregate size limits, no
 line endings, and reject binaries or malformed encodings. Never execute supplied DDL,
 HTML or scripts.
 
-Clicking Generate sends the normalized supplied material directly through the server-only
-OpenAI-compatible adapter. The adapter appends `/responses` to the validated configured
-base URL and uses a JSON Schema structured-output contract, configured model, bounded
-timeout and no application tools. Base URLs must use HTTP or HTTPS, contain no embedded
-credentials and remain length bounded. Provider runtime settings are server-only
-environment values: `OPENAI_TIMEOUT_MS` defaults to 120 seconds,
-`OPENAI_REASONING_EFFORT` defaults to `low`, and `OPENAI_MAX_OUTPUT_TOKENS` defaults to
-8,000. Invalid settings fail closed before a request. The application does not rely on
-provider output being valid: it parses and validates locally before persistence. Tests
-replace the adapter and never make a network call.
+Clicking Generate first persists the editable intake and creates a job from that exact
+snapshot. The job invokes the selected server-only adapter with a JSON Schema
+structured-output contract, configured model, bounded timeout and no application tools.
+OpenAI base URLs must use HTTP or HTTPS, contain no embedded credentials and remain
+length bounded. Provider runtime limits are server-only environment values and invalid
+settings fail closed before a request. The application does not rely on provider output
+being valid: it parses and validates the complete response locally before persistence.
+Tests replace adapters and never make an external network call.
+
+The VS Code bridge is local IPC, not an HTTP listener. Its user-only connection record
+contains a random pipe name and bearer token and is replaced safely as VS Code windows
+activate or close. Protocol frames are versioned, authenticated and size bounded. Model
+discovery and generation are the only supported operations. The bridge does not expose
+GitHub/Azure sign-in state, OAuth tokens, VS Code commands, tools or filesystem access.
 
 Chat uses a separate structured-output contract over the same provider boundary. It sends
 the current requirements, canonical model, bounded source context, next unresolved
@@ -242,18 +303,19 @@ clear the clarification queue. A chat response must contain a non-empty assistan
 and a complete generation result; partial patches are not applied to the canonical model.
 
 SQLite is reachable only through the repository interface. Renderers are pure functions
-over a validated canonical model. Download endpoints derive safe filenames, set explicit
-content types and return only the requested representation.
+over a validated canonical model. Download endpoints derive safe filenames, set explicit content types and return only the
+requested representation. Browser Copy and Export PDF render from the same generated
+Mermaid source used by the Mermaid preview; the draw.io preview is never an export source.
 
 ## Security and privacy
 
 The pilot has no authentication and therefore binds to the local development host by
 default; it must not be exposed as a shared network service. The UI clearly states that
-Generate and chat send the supplied material to the configured provider. The API key
-remains a server-side environment variable and is never persisted, serialized into page
-props or included in browser bundles. The non-secret base URL and model are visible and
-editable in Settings; changing them affects the next provider request and never migrates
-or retransmits stored model data by itself.
+Generate and chat send the supplied material to the project-selected provider. OpenAI
+API keys remain server environment variables. GitHub/Azure credentials remain owned by
+VS Code. Neither is persisted, serialized into page props or included in browser bundles.
+Non-secret provider/model selections are visible and editable; changing them affects only
+the next provider request and never migrates or retransmits stored model data by itself.
 
 Logs contain request IDs, durations and typed error categories, not source content,
 prompts, provider responses or secrets. Provider diagnostics record the configured model
@@ -271,11 +333,11 @@ retention, encryption, approved provider settings and organisational data contro
 
 Unsupported or oversized input is rejected before storage or provider access with a
 specific correction message. Missing provider configuration disables live Generate while
-leaving saved models usable. Provider timeout, rate limit or unavailable responses retain
-the current working draft and offer an explicit retry without creating a version. A
-response stopped by the configured output-token cap is reported as incomplete rather than
-streaming or background generation is deferred until representative timings show that the
-interactive request still needs a longer-running job boundary.
+leaving saved models usable. Provider timeout, quota/rate limit or unavailable-runtime responses retain the current
+working draft and offer an explicit retry without creating a version. A response stopped
+by the configured output-token cap is reported as incomplete. Job progress, transcript
+and heartbeats make long calls observable; stale or restart-orphaned jobs become
+interrupted rather than appearing to run forever.
 An invalid provider base URL or blank model is rejected inline without changing the saved
 settings. A configured endpoint that does not support the expected Responses API fails as
 a typed provider error while saved work remains available. The same typed provider
@@ -283,7 +345,8 @@ failures apply to chat. A failed, incomplete or invalid chat
 response leaves both the current draft and transcript unchanged, making retry explicit.
 The optimistic user bubble and thinking indicator are presentation-only and are removed
 on failure; the submitted text is restored to the composer when that does not overwrite a
-newer draft message.
+newer draft message. Mermaid render failure keeps Copy and Export PDF disabled. Clipboard
+or PDF creation failure reports a typed retryable error and does not affect the model.
 
 Malformed or schema-invalid model output is never stored as a canonical model; validation
 details become a bounded error and may drive a new generation attempt. Domain ambiguity
@@ -299,22 +362,27 @@ human reacceptance.
 Domain unit tests compare the canonical Claim-Payment fixture with literal expected
 entities, attributes, keys, optionality, cardinality, definitions, layout and aggregate
 rules. Input tests cover prose, Markdown, DDL, SQL, JSON, encoding, size limits and the
-rule that DDL is never executed. Provider contract tests use a fake adapter for generation
-and chat success, ambiguity, invalid structure, timeout, incomplete output, safe
-diagnostics, configured base URL/model selection and missing or invalid configuration; a
-client-bundle check guards against credential leakage.
+rule that DDL is never executed. Provider contract tests use fake adapters for generation and chat success, ambiguity,
+invalid structure, timeout, incomplete output, safe diagnostics, project provider/model
+selection and missing or invalid configuration. VS Code protocol tests cover
+authentication, framing, progress, transcript and bounded payloads; a client-bundle check
+guards against credential leakage.
 
 Repository integration tests use a temporary SQLite database to prove source retention,
-pre-generation update and delete, atomic chat-turn persistence, autosave, transactional
-immutable versions, list, reopen and continue-from-version.
+pre-generation update and delete, project-provider isolation, job snapshots, heartbeat,
+restart/stale interruption, cancellation, atomic completion, chat-turn persistence,
+autosave, transactional immutable versions, list, reopen and continue-from-version.
 Renderer tests parse Mermaid semantics and draw.io XML and compare both with the same
 canonical fixture. Component tests exercise structured editing, read-only diagnostic
 views, settings, collapsible navigation, chat wrapping and the accessible zoom controls.
-A browser test covers create, generate draft,
-mouse-wheel zoom, drag pan, keyboard/reset alternatives, answer clarification, edit,
-autosave, save version, reopen, preview and download. The configured project unit and
+A browser test covers create, durable generation progress, reload, mouse-wheel zoom, drag
+pan, keyboard/reset alternatives, answer clarification, edit, autosave, save version,
+reopen and both previews. It also selects draw.io before proving Copy produces a non-empty
+Mermaid PNG and Export PDF starts with `%PDF` and contains the diagram and all textual
+model sections. Desktop and 375px checks cover toolbar scrolling, disclosure defaults,
+floating chat placement and horizontal overflow. The configured project unit and
 production build commands run on the exact candidate. Final verification maps independent
-evidence to every request criterion and to the complete intent without a live OpenAI call.
+evidence to every request criterion and the complete intent.
 
 ## Rollout and rollback
 
@@ -346,17 +414,24 @@ of scope.
 | D-010 | Bind the unauthenticated pilot locally and make no shared-service claim. | Single-user scope does not justify an authorization system. | Add authentication now. | Network deployment requires a new accepted design. |
 | D-011 | Use the environment model as the initial server-side default. | Model choice starts configurable without being embedded in source. | Hard-code a model. | A saved D-019 setting supersedes the default, and missing effective configuration is reported clearly. |
 | D-012 | Store generated representations with each immutable version. | Reopened versions retain the exact reviewed outputs. | Regenerate every historical view. | Version storage is larger but deterministic review is simpler. |
-| D-013 | Use a responsive three-zone enterprise workbench with progressive entity disclosure and a persistent preview rail. | It keeps dense modelling tasks scannable and puts model feedback beside the edit that causes it. | Marketing hero with a single long form; separate editor and preview pages. | The layout stacks at narrower widths and UI tests must cover disclosure, focus, feedback and responsive behavior. |
-| D-014 | Make synchronous OpenAI generation bounds configurable, defaulting to a 120-second timeout, low reasoning effort and 8,000 generated tokens, with typed non-sensitive diagnostics. | The original fixed 45-second deadline aborted valid `gpt-5.6-sol` structured-output work while connectivity and model access were healthy. | Keep the fixed deadline; immediately adopt streaming/background jobs; hard-code a faster model. | Operators can tune latency without source edits; capped incomplete responses fail explicitly; streaming remains a later measured improvement. |
+| D-013 | Use a responsive enterprise workbench with progressive entity disclosure and a persistent model canvas. | It keeps dense modelling tasks scannable and makes model feedback visible near the edits that cause it. | Marketing hero with a single long form; separate editor and preview pages. | The layout adapts at narrower widths and UI tests must cover disclosure, focus, feedback and responsive behavior. |
+| D-014 | Keep provider request bounds configurable, defaulting OpenAI requests to a 120-second timeout, low reasoning effort and 8,000 generated tokens, with typed non-sensitive diagnostics. | The original fixed 45-second deadline aborted valid `gpt-5.6-sol` structured-output work while connectivity and model access were healthy. | Keep the fixed deadline; hard-code a faster model. | Durable jobs still enforce adapter-specific bounds and capped incomplete responses fail explicitly. |
 | D-015 | Treat project intake as a saved lifecycle stage before provider generation, with editable inputs and confirmed project deletion. | A provider failure must not trap a saved project in a read-only retry screen, and users need to prepare work without making a provider call. | Create projects only as a side effect of Generate; require database cleanup for abandoned projects. | The API supports update and delete, deletes cascade transactionally, and the UI distinguishes Save model from Generate draft. |
-| D-016 | Keep a persistent project chat beside the structured model editor and apply only complete, validated LLM revisions. | Users need a conversational way to evolve a built model while seeing the resulting source of truth. | Hide chat on a separate page; apply unvalidated JSON patches; keep chat ephemeral. | Chat turns and revised drafts commit atomically, recent context is bounded, and responsive layouts stack the same two surfaces on narrow screens. |
-| D-017 | Make live output and chat the top collaboration row, handle clarification as a chat workflow, place the structured editor below, and leave assumptions and warnings until the bottom review section. | The user should see the model change beside the conversation driving it, while detailed editing and residual review information follow the main task flow. | Keep a separate clarification form; lead with assumptions and warnings; retain the editor-plus-preview-rail layout. | Chat requests include the pending question, successful answers update the complete validated draft, keyboard order follows visual order, and narrow screens stack output, chat, editor, history and review in that sequence. All buttons use one typographic and sizing system. |
+| D-016 | Keep a persistent project chat available from the model workbench and apply only complete, validated LLM revisions. | Users need a conversational way to evolve a built model while seeing the resulting source of truth. | Hide chat on a separate page; apply unvalidated JSON patches; keep chat ephemeral. | Chat turns and revised drafts commit atomically, recent context is bounded, and the floating panel does not reflow the editor. |
+| D-017 | Handle clarification as a chat workflow, place the structured editor below live output, and leave assumptions and warnings until the bottom review section. | The user should see model changes immediately while detailed editing and residual review information follow the main task flow. | Keep a separate clarification form; lead with assumptions and warnings; retain the editor-plus-preview-rail layout. | Chat requests include the pending question, successful answers update the complete validated draft, keyboard order follows content order, and narrow screens retain output, editor, history and review sequencing. All buttons use one typographic and sizing system. |
 | D-018 | Wrap Mermaid and draw.io in one bounded interactive canvas with pointer-centred wheel zoom, drag panning, visible zoom/reset buttons and keyboard equivalents. | Large insurance models must remain inspectable without page-level overflow, while dragging cannot be the only way to navigate. | Keep scrollbars only; add interaction to just one representation; depend on a diagramming library. | Both formats share identical viewport behavior, scale is bounded, mode changes reset the view, controls have accessible names, and browser tests exercise real mouse and keyboard input. |
 | D-019 | Persist a validated non-secret base URL and model for an OpenAI-compatible Responses API while keeping the API key environment-only. | Selecting another compatible provider must not require source edits or put credentials in the browser/database. | Keep all settings environment-only; store API keys in SQLite; implement multiple provider-specific adapters now. | Settings affect subsequent requests, use an idempotent singleton row, clearly disclose the configured destination, and reject invalid URLs/models without overwriting the last valid values. |
 | D-020 | Use a collapsible workspace navigation rail, make the brand a home action, enlarge the visualization, reset it to 50%, and constrain chat content to the panel. | The model is the primary work surface and should gain space without sacrificing discoverable navigation or readable conversation. | Keep the permanent 240px panel; hide navigation entirely; add a separate route for every view. | Desktop collapse state remains local UI state with labelled icon controls, narrow screens keep a full-width menu, the live-output column receives the recovered width, and long user/provider content wraps without page overflow. |
 | D-021 | Make chat sends optimistic with one live thinking turn, bound long assistant bubbles to ten visible lines, and collapse every structured-editor group and history by default. | The user needs immediate acknowledgement, an unbroken readable transcript and a compact work surface without losing content or model-update safety. | Wait silently for the provider; truncate long replies; leave the first entity and secondary editors open; allow concurrent model mutations. | Transient chat state is distinct from persisted history, failure restores unsent work safely, one provider revision runs at a time, native disclosures remain keyboard operable, and behavioral tests cover pending, success, failure and initial collapsed state. |
 | D-022 | Treat the original requirements as editable Persistent model instructions throughout the working-draft lifecycle. | The model needs a durable human-authored brief that can evolve with the project and consistently ground regeneration and chat. | Hide requirements after generation; copy them into chat manually; apply edits immediately by calling the provider. | Instruction edits persist without contacting the provider, their saved state is visible, and any unsaved edit is stored before the next regenerate or chat request. |
 | D-023 | Size transcript rows to their content, give long human, assistant and clarification messages a ten-line reading surface, and animate the in-flight thinking status with reduced-motion support. | The existing grid compressed rows until the transcript never overflowed, clipping large bubbles and making a nominal scroll region inert. Slow provider calls also need continuous, purposeful feedback. | Add another overflow declaration without changing grid sizing; show a static status; let long messages grow without bounds. | The transcript becomes independently scrollable, nested message scrolling hands off at its boundary, long bubbles remain readable without dominating the panel, and activity motion remains accessible. |
+| D-024 | Select provider and model per project through one provider factory, initialized from a global default. | Existing projects must retain an auditable destination while new projects benefit from updated defaults. | Use one global provider for every project; store credentials with projects. | Only non-secret selections are persisted and every generation job snapshots the effective selection. |
+| D-025 | Access the user's signed-in GitHub Copilot models through a public-API VS Code extension and authenticated local named-pipe protocol. | The managed workstation has VS Code SSO but no reusable OpenAI API key, and private Agent Host or credential extraction would be unsupported and unsafe. | Extract OAuth tokens; use private VS Code internals; require a new API key. | The extension uses `vscode.lm`, no tools and bounded versioned frames; runtime availability and quota become explicit provider errors. |
+| D-026 | Run generation as durable SQLite-backed jobs with heartbeat, transcript and atomic validated completion. | Long model calls outlive browser requests and need visible progress, reload recovery and a truthful restart state. | Keep one synchronous request; write partial models as tokens arrive; use an external queue. | Jobs are local and single-process, unfinished work becomes interrupted after restart/staleness, and partial output never mutates the canonical model. |
+| D-027 | Keep requirements, attachment text and project provider/model editable on the detail screen and persist them before regeneration. | Regeneration must use the exact revised brief without forcing project recreation. | Make attachments read-only; send unsaved browser state; edit only global settings. | Save is provider-free, regeneration labels unsaved changes and its job snapshot is reproducible. |
+| D-028 | Apply the supplied AustralianSuper wordmark, Arial typography and approved palette through restrained pastel design tokens. | The pilot must comply with the supplied fund-wide brand while remaining calm for dense modelling work. | Use the former generic blue theme; introduce unapproved high-contrast colors. | The exact deck asset and palette remain the source of truth and responsive/accessibility checks constrain decorative treatment. |
+| D-029 | Consolidate representation actions into one toolbar, float chat at the lower-left, and collapse secondary review groups initially. | The diagram needs maximum vertical space while assistance and review details remain available without dominating the workbench. | Keep scattered actions and permanent side-by-side chat; leave all review cards expanded. | The toolbar scrolls instead of wrapping on narrow screens, chat opens above its fixed bubble, and native disclosures preserve keyboard access. |
+| D-030 | Always rasterize Copy and PDF from a dedicated Mermaid SVG rendered with native SVG text. | Users expect the exported visual to match Mermaid even when draw.io is selected, and Mermaid's XHTML labels taint browser canvases. | Export the selected tab; use the draw.io-layout surrogate; retain `foreignObject` labels. | The export source is representation-independent, safe to rasterize, and PDF adds complete paginated model details. |
 
 ## Approval
 
@@ -402,3 +477,10 @@ Michal then reported that long message bubbles on both sides were not large enou
 thinking state felt static, and the message area did not actually scroll. That direct interaction
 decision accepts revision 11 and D-023. It refines the existing chat contract without
 changing provider, persistence or request semantics.
+Michal subsequently required provider/model selection, editable requirements and source
+documents, durable generation with heartbeats, visible progress, an AustralianSuper
+branded pastel interface, a consolidated model toolbar, floating chat and collapsed
+secondary review groups. On 2026-10-01, Michal authorized completing the full delivery
+sequence and clarified that Copy and Export PDF must use the Mermaid representation even
+when draw.io is selected. That explicit decision accepts design revision 12 for request
+revision 2 and D-024 through D-030.
