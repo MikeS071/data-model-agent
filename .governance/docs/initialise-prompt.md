@@ -5,7 +5,7 @@ The project name and GitHub owner are deliberately not hard-coded.
 
 ```text
 This current directory is empty and should become a new dev-stack project. Bootstrap it
-from https://github.com/EtnaJamesCapital/dev-stack.git, then start the guided feature
+from https://github.com/MikeS071/dev-stack.git, then start the guided feature
 intake. Do not ask me for a release path, digest, hash, branch commit or adapter file.
 
 First confirm the directory is empty. Ask me these bootstrap questions one at a time,
@@ -25,7 +25,9 @@ start empty because the application's stack has not been designed yet. Wait for 
 approval of the plan before writing local project files.
 
 After approval, clone the dev-stack GitHub repository into a temporary directory outside
-this project. Read its `AGENTS.md`, project-initialisation skill and quickstart fully.
+this project and check out its latest reviewed release tag. If no suitable release is
+available, stop and ask me which source to use. Read its `AGENTS.md`,
+project-initialisation skill and quickstart fully.
 Use its installer to run `doctor`, then `plan` against this project and adapter. Show me
 the installer's readable paths/actions and release version; keep internal identities
 private. If the plan matches the approved bootstrap, run `apply` and `verify`. Do not copy

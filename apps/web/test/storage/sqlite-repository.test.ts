@@ -20,6 +20,15 @@ describe('SQLite project and version lifecycle', () => {
       baseUrl: 'https://models.example/v1', model: 'insurance-model',
     });
     expect(repository.getProviderSettings(fallback)).toEqual({ baseUrl: 'https://models.example/v1', model: 'insurance-model' });
+    expect(repository.getProviderSettings({ ...fallback, model: 'gpt-5.6-sol' }, 'copilot-sdk')).toEqual({
+      ...fallback, model: 'gpt-5.6-sol',
+    });
+    repository.saveProviderSettings({ ...fallback, model: 'gpt-5.6-sol' }, 'copilot-sdk');
+    expect(repository.getProviderSettings(fallback)).toEqual({ baseUrl: 'https://models.example/v1', model: 'insurance-model' });
+    expect(repository.getProviderSettings(fallback, 'copilot-sdk')).toEqual({ ...fallback, model: 'gpt-5.6-sol' });
+    expect(repository.getProviderSettings({ ...fallback, model: 'gpt-5.6-sol' }, 'vscode-agent-host')).toEqual({
+      ...fallback, model: 'gpt-5.6-sol',
+    });
     expect(repository.getProject(project.id)?.requirements).toBe('Model claims.');
     repository.close();
   });
@@ -76,5 +85,81 @@ describe('SQLite project and version lifecycle', () => {
     repository.continueFromVersion(project.id, 1);
     expect(repository.getProject(project.id)?.draft?.model.businessDefinition).toBe('Edited working definition.');
     repository.close();
+  });
+
+  it('persists project provider settings and durable generation progress independently', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'data-model-service-')); directories.push(directory);
+    const repository = new SqliteModelRepository(join(directory, 'models.db'));
+    const providerSettings = {
+      providerType: 'vscode-agent-host' as const,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.6-sol',
+    };
+    const project = repository.createProject({
+      title: 'Claim Payment', requirements: 'Model claims.', sources: claimSources, providerSettings,
+    });
+    expect(project.providerSettings).toEqual(providerSettings);
+
+    const job = repository.createGenerationJob(project.id, providerSettings, {
+      requirements: project.requirements,
+      sources: claimSources,
+      currentModel: null,
+      clarification: null,
+    });
+    expect(job.status).toBe('queued');
+    repository.claimGenerationJob(job.id);
+    repository.updateGenerationJobProgress(job.id, 'receiving', 'Receiving live model output…', '{"model":');
+    expect(repository.getGenerationJob(job.id)).toEqual(expect.objectContaining({
+      status: 'running', phase: 'receiving', transcript: '{"model":',
+    }));
+    repository.completeGenerationJob(job.id, generatedClaimPayment);
+    expect(repository.getGenerationJob(job.id)?.status).toBe('completed');
+    expect(repository.getProject(project.id)?.draft).toEqual(generatedClaimPayment);
+
+    const cancelled = repository.createGenerationJob(project.id, providerSettings, {
+      requirements: project.requirements,
+      sources: claimSources,
+      currentModel: generatedClaimPayment.model,
+      clarification: null,
+    });
+    repository.claimGenerationJob(cancelled.id);
+    repository.cancelGenerationJob(cancelled.id);
+    const replacement = structuredClone(generatedClaimPayment);
+    replacement.model.businessDefinition = 'A cancelled result must never be saved.';
+    expect(() => repository.completeGenerationJob(cancelled.id, replacement)).toThrow('generation-job-unavailable');
+    expect(repository.getGenerationJob(cancelled.id)?.status).toBe('cancelled');
+    expect(repository.getProject(project.id)?.draft).toEqual(generatedClaimPayment);
+    repository.close();
+  });
+
+  it('keeps healthy jobs active across connections and interrupts them after the heartbeat becomes stale', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'data-model-service-')); directories.push(directory);
+    const path = join(directory, 'models.db');
+    const providerSettings = {
+      providerType: 'vscode-agent-host' as const,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.6-sol',
+    };
+    const first = new SqliteModelRepository(path);
+    const project = first.createProject({ title: 'Claim Payment', requirements: 'Model claims.', sources: [], providerSettings });
+    const job = first.createGenerationJob(project.id, providerSettings, {
+      requirements: project.requirements, sources: [], currentModel: null, clarification: null,
+    });
+    first.claimGenerationJob(job.id);
+
+    const concurrent = new SqliteModelRepository(path);
+    expect(concurrent.getGenerationJob(job.id)?.status).toBe('running');
+    expect(() => concurrent.createGenerationJob(project.id, providerSettings, {
+      requirements: project.requirements, sources: [], currentModel: null, clarification: null,
+    })).toThrow('generation-in-progress');
+    concurrent.close();
+    first.close();
+
+    const reopened = new SqliteModelRepository(path, { now: () => Date.now() + 61_000 });
+    expect(reopened.getGenerationJob(job.id)).toEqual(expect.objectContaining({
+      status: 'interrupted',
+      error: 'generation-interrupted',
+    }));
+    reopened.close();
   });
 });

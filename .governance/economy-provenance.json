@@ -2,7 +2,7 @@
   "sources": [
     {
       "source": ".governance/tooling/scripts/dev/governance-economy.mjs",
-      "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+      "sourceRelease": "v0.1.0",
       "sourceSha256": "69b183004eb266dbf735026230d91293c953fc4d3668a7f8c64dd6d6c0ed058b"
     }
   ],

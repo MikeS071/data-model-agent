@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { digest, validateScope } from './scope.mjs';
 
 export const reviewDefaults = { reasoning: 'medium', verbosity: 'low' };
+export const reasoningEfforts = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 export const pricing = { version: '2026-09-15', currency: 'USD', creditBilling: 'unverified',
   source: 'https://developers.openai.com/api/docs/models/gpt-6-astra',
   models: { 'gpt-6-astra': { input: 10, output: 50, cached: 1, write: 12.5, contextThreshold: 272000 } } };
@@ -11,7 +12,8 @@ const keys = (value, names) => assert.deepEqual(Object.keys(value).sort(), [...n
 export function reviewSettings(config) {
   const value = Object.hasOwn(config, 'review') ? config.review : reviewDefaults;
   keys(value, Object.keys(reviewDefaults));
-  assert.equal(value.reasoning, 'medium'); assert.equal(value.verbosity, 'low');
+  assert.ok(reasoningEfforts.includes(value.reasoning));
+  assert.ok(['low', 'medium', 'high'].includes(value.verbosity));
   return value;
 }
 export const tokenFields = ['input_tokens', 'cached_input_tokens', 'cache_write_input_tokens', 'output_tokens', 'reasoning_output_tokens'];

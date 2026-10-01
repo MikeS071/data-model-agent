@@ -167,7 +167,8 @@ def result_schema():
         'required': ['completed', 'remaining', 'defects', 'verification', 'blocked', 'executionFailed', 'reportedOutcome'],
         'properties': {
             'completed': {'type': 'array', 'items': {'type': 'object', 'additionalProperties': False,
-                'required': ['id', 'proof'], 'properties': {'id': {'type': 'string'}, 'proof': {'type': 'string'}}}},
+                'required': ['id', 'proof'], 'properties': {'id': {'type': 'string'},
+                'proof': {'type': 'string', 'pattern': '^sha256:[a-f0-9]{64}$'}}}},
             'remaining': {'type': 'array', 'items': {'type': 'string'}},
             'defects': {'type': 'array', 'items': {'type': 'string'}},
             'verification': {'type': 'string', 'enum': ['passed', 'failed', 'incomplete']},
@@ -316,7 +317,7 @@ def delegate(scopes, task, seconds, scope, task_id, attempt, profile):
                   'Only write within these globs: ' + json.dumps(scopes) +
                   '\nRead the scope below. Verify each criterion and the complete intent with focused checks. '
                   'Return only a bare JSON object, without Markdown fences, matching this exact schema: '
-                  + json.dumps(result_schema()) + '\ncompleted contains criterion IDs and sha256 proof references; '
+                  + json.dumps(result_schema()) + '\ncompleted contains the exact supplied criterion IDs and proof strings of the form sha256: followed by 64 lowercase hexadecimal characters. Compute these from the verified artifact; never use prose or placeholders; '
                   'remaining contains every unverified criterion ID. Report defects and failed/incomplete checks honestly. '
                   'Your SCOPE_VERIFIED is only a claim; independent lead review is required. No secrets in output. '
                   '\nWORKER POLICY\n' + (HERE.parents[1] / '.governance/skills/bounded-worker/SKILL.md').read_text() +
@@ -462,12 +463,12 @@ def smoke(profile):
 def main():
     parser = argparse.ArgumentParser()
     subs = parser.add_subparsers(dest='action', required=True)
-    d = subs.add_parser('delegate', usage='tools/delegate-worker --worker-config FILE --scope-record FILE --task-id ID --scope PATH [--attempt 1|2|3] [--timeout SECONDS] -- TASK', description='Return an unverified patch; never apply or merge automatically. The model/provider are explicit configuration; no fallback is permitted.')
+    d = subs.add_parser('delegate', usage='tools/delegate-worker --worker-config FILE --scope-record FILE --task-id ID --scope PATH [--attempt 1|2|3|4] [--timeout SECONDS] -- TASK', description='Return an unverified patch; never apply or merge automatically. The model/provider are explicit configuration; no fallback is permitted.')
     d.add_argument('--worker-config', type=Path, required=True, help='Explicit secret-free Codex config containing the selected provider and model')
     d.add_argument('--scope', action='append', required=True)
     d.add_argument('--scope-record', type=Path, required=True, help='Original intent, stable criteria and owned worker ref/source')
     d.add_argument('--task-id', required=True, help='Task in the coordinator activation record')
-    d.add_argument('--attempt', type=int, choices=[1, 2, 3], default=1)
+    d.add_argument('--attempt', type=int, choices=[1, 2, 3, 4], default=1)
     d.add_argument('--env-file', type=Path, help='Read only the configured provider credential from an explicitly selected existing file')
     d.add_argument('--timeout', type=int, default=600, help='Wall-time seconds, 1..1800; not a monetary cap')
     d.add_argument('task', nargs='+')

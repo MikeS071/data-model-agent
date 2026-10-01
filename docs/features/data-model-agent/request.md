@@ -1,7 +1,7 @@
 ---
 kind: request
 version: 1
-revision: 1
+revision: 2
 status: accepted
 slug: data-model-agent
 ---
@@ -10,9 +10,10 @@ slug: data-model-agent
 
 ## Intent
 
-Give Michal a single-user Next.js application for developing, reviewing, revising,
-saving and exporting insurance data models from requirements and existing technical
-artifacts.
+Give Michal a resilient, AustralianSuper-branded single-user Next.js workspace for
+developing, reviewing, revising, saving and exporting insurance data models from
+requirements and existing technical artifacts. Generation must remain observable and
+recoverable during long model-provider calls.
 
 ## Intent source
 
@@ -22,20 +23,27 @@ Direct user guided intake.
 
 - Pilot for a large insurance organisation.
 - Accept free-form requirements, existing schemas, DDL and Markdown.
-- Use a configurable OpenAI integration through a server-side boundary.
+- Let each project select an available server-side provider and model, including the
+  signed-in VS Code GitHub Copilot language-model service without extracting credentials.
 - Persist and retrieve models and generate Mermaid ER and draw.io XML.
-- Provide preview, editing, regeneration, versioning and downloads through a web UI.
+- Persist durable generation jobs with progress, transcript, heartbeat and retry state.
+- Provide preview, source editing, regeneration, versioning, image copy and PDF export
+  through a branded web UI.
 
 ## Assumptions
 
 - The pilot has one user and requires no authentication.
 - Inputs may contain sensitive organisational information and may be stored and retrieved.
-- A fake OpenAI client is sufficient for acceptance; no live paid model call is required.
+- The local VS Code extension host is already authenticated to GitHub Copilot by the user.
+- Automated tests use fake providers; a bounded live local bridge check is sufficient to
+  prove the signed-in VS Code provider path.
 
 ## Exclusions
 
 - Multi-user access control and production hardening.
-- Deployment, provider provisioning, live paid model calls and repository merge.
+- Deployment, provider-account provisioning and repository merge.
+- Reading, exporting or persisting GitHub, Azure or model-provider credentials.
+- Private VS Code Agent Host protocols or model tools.
 - Automatic application of generated models as database migrations.
 
 ## Acceptance criteria
@@ -77,14 +85,38 @@ relationship is silently invented.
 **Proof:** Use an ambiguous fixture with a fake model response and assert the draft,
 warning, assumption, question order and absence of an invented relationship.
 
-### OPENAI-BOUNDARY
+### PROVIDER-BOUNDARY
 
-**Outcome:** Model generation uses a configurable OpenAI client boundary and converts
-validated structured responses into the canonical model without exposing credentials to
-browser code or persisted records.
+**Outcome:** Every project can select an available provider and model. OpenAI API-key,
+GitHub Copilot SDK and VS Code language-model adapters remain behind one server boundary,
+and the VS Code adapter uses only the public `vscode.lm` API over authenticated local IPC.
+No provider credentials are exposed to browser code or persisted records.
 
-**Proof:** Run server-side integration tests with a fake OpenAI client and inspect client
-bundles and stored fixtures for credential material; do not make a live provider call.
+**Proof:** Run provider contract and project-settings tests, inspect browser bundles and
+stored fixtures for credential material, and complete one bounded VS Code bridge health
+and model request using the signed-in editor.
+
+### DURABLE-GENERATION
+
+**Outcome:** Starting generation creates a durable project job whose provider/model and
+input snapshot cannot change mid-run. The UI shows phase, elapsed time, streamed activity
+and heartbeat, survives reload, supports cancellation and retry, and marks unfinished
+jobs interrupted after an application restart or stale heartbeat. Only a fully parsed and
+validated result may replace the working draft.
+
+**Proof:** Run generation-job and repository tests for queue, heartbeat, completion,
+cancellation, stale/restart interruption and atomic draft replacement; reload the browser
+while a representative job is active.
+
+### EDITABLE-GENERATION-INPUTS
+
+**Outcome:** Requirements, source-document text, provider and model remain editable on
+the model detail screen. Saving them makes no provider call. Regeneration persists all
+modified inputs before creating a job and clearly identifies that changes will be used.
+
+**Proof:** Run component and service tests that modify requirements and attachments,
+change provider/model, save without generation, and assert the regeneration snapshot
+contains the latest persisted values.
 
 ### MERMAID-OUTPUT
 
@@ -102,6 +134,29 @@ the same canonical model and its layout.
 
 **Proof:** Parse generated XML and assert expected entity cells, labels, fields, edges and
 layout coordinates.
+
+### MERMAID-COPY-AND-PDF
+
+**Outcome:** Copy always places a PNG rasterized from the rendered Mermaid ER diagram on
+the clipboard, even while the draw.io preview is selected. Export PDF always uses that
+same Mermaid rendering and includes the visual model plus readable descriptions of every
+entity, attribute, relationship, validation rule, assumption and warning.
+
+**Proof:** Select draw.io, invoke both actions, assert the export source is the rendered
+Mermaid SVG, inspect the clipboard MIME/size, and verify the downloaded file signature,
+diagram image and textual section contents.
+
+### BRANDED-WORKBENCH
+
+**Outcome:** The application follows the supplied AustralianSuper palette, typography and
+approved logo in a calm pastel workbench. Model controls occupy one compact toolbar;
+entities, assumptions and warnings are collapsed initially; the vector canvas remains
+readable when zoomed; and model chat opens from a viewport-fixed lower-left bubble into a
+bounded, scrollable panel above it.
+
+**Proof:** Run component accessibility assertions and inspect desktop, tablet and 375px
+browser layouts for control overflow, focus order, disclosure defaults, fixed chat
+placement, vector clarity and absence of horizontal page scroll.
 
 ### EDIT-VERSION-RETRIEVE
 
@@ -124,4 +179,6 @@ build and UI checks introduced by the implementation.
 ## Approval
 
 Status: accepted. Michal explicitly accepted request revision 1 during the guided pilot
-intake; this Markdown document preserves the semantics of that accepted request.
+intake. On 2026-10-01, Michal authorized the complete resilience, provider, input-editing,
+branding and model-workbench delivery sequence and clarified that Copy and Export PDF
+must always use the Mermaid diagram. That direct decision accepts request revision 2.

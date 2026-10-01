@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "origin": {
-    "commit": "7c2d189fa09353311d44934284039bf1b80fbb54",
+    "sourceRelease": "v0.1.0",
     "blobs": [
       { "name": "admission.py", "sourceSha256": "9d956d54b726c84726ecdae4276ea54207aebabbeafcee7f69f58dedad848235" },
       { "name": "runtime_observation.py", "sourceSha256": "8d44da5ce1e9b26324fabdf363bba1c5d829deea03e253de70295cb1f5ab6a10" },

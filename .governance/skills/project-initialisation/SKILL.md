@@ -15,13 +15,14 @@ confirmed origin only when it exists, and create a secret-free adapter for the r
 `owner/project-name`; verification commands may be empty until design selects the stack.
 
 Obtain the installation source by cloning
-`https://github.com/EtnaJamesCapital/dev-stack.git` into a temporary directory outside
-the project. Read that checkout's root instructions, this skill and quickstart. Run its
+`https://github.com/MikeS071/dev-stack.git` into a temporary directory outside
+the project and checking out a reviewed release tag. If none is suitable, ask for a
+source decision before installing. Read that checkout's root instructions, this skill and quickstart. Run its
 installer `doctor`, `plan`, present the readable release version/paths/actions, then
 `apply` and `verify` when the reviewed plan matches the approved bootstrap. Do not ask the
 human for release paths, digests, hashes or commit identifiers, and do not hand-copy the
 source tree. Remove only the temporary clone created by this workflow after verification.
-Network access to clone the named public source is within this bootstrap request; remote
+Network access to clone the named public source is within this bootstrap request. Remote
 repository creation, pushes and other external writes still require separate authority.
 
 The governance installation and the application feature are distinct. Commit the local

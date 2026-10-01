@@ -59,6 +59,11 @@ test('committed review binds local policy/full leaves and real behavior without 
     assert.equal(bundle.costs.total, null); assert.equal(bundle.metadata.base, 'develop');
     assert.ok(bundle.context['.governance/quality.md'].includes('### Additional code-quality review conditions'));
     assert.ok(bundle.context['.governance/skills/principle-prove-it-works/SKILL.md'].includes('# Prove It Works'));
+    const unmetered = reviewBundle(context(cwd, delivery), scope, { head, base, staging: base, output: '.governance-artifacts/unmetered-review.json' }, { context: ['value.cjs'], principles: [], checks: [{ name: 'value', criteria: ['VALUE'] }], reasoning: { effort: 'high', reason: null } });
+    assert.equal(unmetered.code, 0);
+    const unmeteredBundle = JSON.parse(readFileSync(join(cwd, unmetered.result.artifact.path)));
+    assert.equal(unmeteredBundle.costs, null);
+    assert.equal(unmeteredBundle.reasoning.effort, 'high');
     writeFileSync(join(cwd, 'AGENTS.md'), '# Changed project policy\n');
     const changed = commit(), changedPlan = reviewPlan({ cwd, scope, head: changed, reviewBase: base, stagingBase: base, delivery });
     assert.equal(changedPlan.policyChanged, true); assert.equal(inspectReview(changedPlan, record, scope).ready, false);

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-candidate.2
+## 0.1.0
 
 Replaces human-authored request JSON and active scope-v1 input with a two-gate Markdown
 workflow. A committed request records intent and acceptance; a separately accepted design
@@ -28,11 +28,23 @@ user-defined project name, then starts one-critical-question-at-a-time feature i
 Adds an attributed, pinned local
 copy of UI/UX Pro Max 2.13.0 with Codex selection metadata and UI-only routing; backend,
 API, database, infrastructure and other non-visual work are explicitly excluded.
+Reconciles five portable governance skill ideas as concise, project-neutral skills
+with native routers: search-first, context-handoff, API contract review, migration safety
+and scoped security review. The installer can now adopt byte-and-mode-identical existing
+files and restore their original contents on removal after an upgrade; differing files
+still block. This supports a reviewed migration from an existing governance directory.
+Reconciles scoped native delegation with a four-attempt correction limit while keeping
+the optional external worker disabled until task-bound activation. A new activation
+cannot restart a task's retry sequence. Adds an MIT licence for dev-stack itself and a
+professional repository README; third-party notices remain separate.
+Release verification also accepts archive-extraction read/write permission differences
+while still checking every file's bytes and executable bit. Installation applies the
+manifest's canonical permissions.
 
 ## 0.1.0-candidate.1
 
 Private local extraction of scope/config/result contracts, read-only baseline, reviewed
 actions and exact readback, source-bound code review, compact bundles/usage measurement,
 existing bounded worker, selected attributed skills and pinned project-local lifecycle.
-Publication and first real adoption remain separately approved. See [scope proof](proof.json) for
-executed acceptance and outstanding publication gates; no application acceptance claim.
+Published as a private prerelease. First real adoption remains separately scoped; see
+[scope proof](proof.json) for executed governance checks, not application acceptance.

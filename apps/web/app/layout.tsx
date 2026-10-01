@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './styles.css';
 
 export const metadata: Metadata = {
-  title: 'Model Foundry',
+  title: 'Model Foundry | AustralianSuper',
   description: 'A focused workspace for developing reviewable insurance data models.',
 };
 

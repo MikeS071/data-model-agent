@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "0.1.0-candidate.2",
+  "version": "0.1.0",
   "supported": {
     "os": "linux",
     "node": "24.14.0",
@@ -10,8 +10,18 @@
   },
   "files": [
     {
+      "path": ".agents/skills/dev-stack-api-contract-review/SKILL.md",
+      "sha256": "946b833855f1d2a7d53597c4e1be11843c2133610a8d055aba421165f24450f3",
+      "mode": 420
+    },
+    {
       "path": ".agents/skills/dev-stack-bounded-worker/SKILL.md",
       "sha256": "94195b2f348be271d789460015fd4c184e9030841d11fdbf21f62f8ade5615a0",
+      "mode": 420
+    },
+    {
+      "path": ".agents/skills/dev-stack-context-handoff/SKILL.md",
+      "sha256": "b5cca4c8ce219aef2e091606e35d609137a2a84e61fc3919ce386a982f2a3c04",
       "mode": 420
     },
     {
@@ -25,13 +35,28 @@
       "mode": 420
     },
     {
+      "path": ".agents/skills/dev-stack-migration-safety/SKILL.md",
+      "sha256": "f06e038f2064075b28c14cc802b4a6c698c2e146ae8c437cd3d767d939f86729",
+      "mode": 420
+    },
+    {
       "path": ".agents/skills/dev-stack-project-initialisation/SKILL.md",
       "sha256": "9bc9aa957f7485a147c9ca4d0e5f25430b02863db22e0118b0952b82863aff4f",
       "mode": 420
     },
     {
       "path": ".agents/skills/dev-stack-project-initialisation/agents/openai.yaml",
-      "sha256": "70b61c9b79ba9a3600c48c67c60536c372715bec2dfebdd167542925c93df12c",
+      "sha256": "e2315d74dae9ea8fdc9f1b7e2ce0fc219f35de5882495426ed421287c189a40a",
+      "mode": 420
+    },
+    {
+      "path": ".agents/skills/dev-stack-search-first/SKILL.md",
+      "sha256": "8443779720933bef2681414182589a5138e9c1a3860e41a3bb8d4b7f46b5e917",
+      "mode": 420
+    },
+    {
+      "path": ".agents/skills/dev-stack-security-review/SKILL.md",
+      "sha256": "a33a0171b586c6e99a4d2bc618c4484841d8df49b0b368d53e51befa6205915c",
       "mode": 420
     },
     {
@@ -65,13 +90,18 @@
       "mode": 420
     },
     {
+      "path": ".governance/LICENSE.dev-stack",
+      "sha256": "04f124c027d8d9d41456a0c651c79b4b7bfc8db6eaf4812bca08e2dd23f2d6cd",
+      "mode": 420
+    },
+    {
       "path": ".governance/LICENSE.third-party",
       "sha256": "bc957ca6bee02792566a1a028d105e02e247c6e77cf057061674273da77b200e",
       "mode": 420
     },
     {
       "path": ".governance/action-provenance.json",
-      "sha256": "7d8d63c75deb01cabac11ad98b9290ae4a3a106f27ef453f43693e3d5d24e5f0",
+      "sha256": "507c7f50cb4a93ccbee964a5f14902e2c0ae0868bb9e99c3e9304813f3701cea",
       "mode": 420
     },
     {
@@ -81,7 +111,7 @@
     },
     {
       "path": ".governance/build-release.py",
-      "sha256": "4b6b5e276b0046bee7daaaf5593ae367a14723b73a8f89965d753d18198136f3",
+      "sha256": "31a7135000055a11eae33ed2fb02a906096f83a3b980c1f6e78b1a2559113dd6",
       "mode": 420
     },
     {
@@ -96,7 +126,7 @@
     },
     {
       "path": ".governance/core/baseline.mjs",
-      "sha256": "27f1fc3983247f07addcf8e24222420e1df400605674de84d81933b7b6322ed0",
+      "sha256": "c54172c12e4faccd0d6d004c8d2d3f641615f36da75257d753e266c1ee5f9b27",
       "mode": 420
     },
     {
@@ -106,7 +136,7 @@
     },
     {
       "path": ".governance/core/cost.mjs",
-      "sha256": "a0d3324d67dff893af623ff7b3546e8fb121d7b4fbe2f30ba84ece5cf711a42b",
+      "sha256": "5bf1494af110fd2e85aca40be28e550b00c1f1f7b35f7eefc1b339918055dcbe",
       "mode": 420
     },
     {
@@ -116,7 +146,7 @@
     },
     {
       "path": ".governance/core/economy.mjs",
-      "sha256": "26ac40fd6ba0a22371536a12f59d5667b7aa5c88e6cedbe5fb3784e4f0d363e7",
+      "sha256": "006ce8c695688b0dead902b2f099564695408b8be137890d84b0411e9fc0f258",
       "mode": 420
     },
     {
@@ -166,47 +196,47 @@
     },
     {
       "path": ".governance/docs/changelog.md",
-      "sha256": "b7ae5e75ff67f62c6d3a3f3e59d19bf7008df57f0a99a835ec6e05267a0ceb1f",
+      "sha256": "a73dde0532585b13f9cd50b66fa2267dae6178e0a08538493cae9f64a7487d47",
       "mode": 420
     },
     {
       "path": ".governance/docs/initialise-prompt.md",
-      "sha256": "205e5da3ffbac9654e5fdab819468a96ceb11e8f2c7390d582717915efce4bef",
+      "sha256": "d7bd3b1f4c74592ecc200396463de72188ad62b1faf7e5c2de2b23db45ba2dc8",
       "mode": 420
     },
     {
       "path": ".governance/docs/proof.json",
-      "sha256": "ac1fd9363a9415fe97ad8da85c773e5335f7193229a931f70343b342f7facdb9",
+      "sha256": "f80b8c2bbb9f593f2bb623f93d70adeed6e3e83f6e8679a847da27b0115ce5e3",
       "mode": 420
     },
     {
       "path": ".governance/docs/quickstart.md",
-      "sha256": "ae266067a086ac2bf3c469244c7aba9b8e6774777a80c7a20fe6db3334116e51",
+      "sha256": "64d9267f8beeef2f8b0e418cebdb8ec7538deb66a737106ae113f77dd7c4ebac",
       "mode": 420
     },
     {
       "path": ".governance/docs/rationale.md",
-      "sha256": "c52570b227c3560f1d2b1eac77be2878e48774a867e7d19b5779c7a7ab5291b3",
+      "sha256": "d7525ae55785a0c1e9277df3a9a12c0db6f137bd186a17e0f4ae06dc200cd4d6",
       "mode": 420
     },
     {
       "path": ".governance/docs/recipes.md",
-      "sha256": "66ee06820f6bf09e2abb10fe4324fcf5dd6a5c95e3b45453529cfc53609539a9",
+      "sha256": "70edfa7fb0e498b8bca5149871d55d6b36c032b43fc336ed88b0575558c855ba",
       "mode": 420
     },
     {
       "path": ".governance/docs/reference.md",
-      "sha256": "20f5960a1da3f076e5c9e5503d7548cdceb708535580883da39a391fab10159e",
+      "sha256": "02971494b4dc5f99a57d792ba722d229e472d0bd0fce536106ce923b1b81743a",
       "mode": 420
     },
     {
       "path": ".governance/docs/workers.md",
-      "sha256": "082911146fcf71970534fb6fd5bf2b5811ae843fd21f028e7cec413d7f2bfc58",
+      "sha256": "6b495c4cf3e9584d0af026805f2cd95f5c4b6c3db6bdc79c0f8ab4d92d6dab29",
       "mode": 420
     },
     {
       "path": ".governance/economy-provenance.json",
-      "sha256": "52cf061b33d748e124c007f66a93ea69176a8ed8aedebf54ce25fb2ec9274a82",
+      "sha256": "151b179d45562d06306d0bb384794e77e200be4d827831ca05f087b76ec7bd9d",
       "mode": 420
     },
     {
@@ -216,17 +246,17 @@
     },
     {
       "path": ".governance/install.py",
-      "sha256": "4a53d335fd8a82e35c03efdc8a45368914a2b6eb0ac0df243d875750615cbf83",
+      "sha256": "3ce55ad99addcff38f3b603368eb0f01fe1499cdab21348d28d3975aafb6d293",
       "mode": 420
     },
     {
       "path": ".governance/policy.md",
-      "sha256": "46172be349259a3500e709b885e8f236b2a4db808ebc00e3135cf3e1100004c3",
+      "sha256": "6db46555bb767001510e46768f6e1ce16faa6a55daf063b345d22aadd3523214",
       "mode": 420
     },
     {
       "path": ".governance/principles.md",
-      "sha256": "95ecf49b2dbdc05e9d60a2327b59a2ae950f1667bd4c02280c054af792305d00",
+      "sha256": "180a4799d23676cdd60f0b0ceb7f0199684775042a5e05224c74c51b7a72486e",
       "mode": 420
     },
     {
@@ -236,12 +266,12 @@
     },
     {
       "path": ".governance/release-inputs.json",
-      "sha256": "b91f5f5ee181aef4d52f67d926268d15243fe546e41f171d9443c7c8aaa1be78",
+      "sha256": "f127caaab5d0ae595405b7d9bb94ca6c133f653b147826f3afa7f7b8ff6ef01e",
       "mode": 420
     },
     {
       "path": ".governance/review-provenance.json",
-      "sha256": "eee3f82be67746391d7a93669b4f16e5c200479e5307afa52d7ffc581dcabd5e",
+      "sha256": "5dd69648246841206e439195c23793d43c779bd1bb06636f31f88e1e27c9067f",
       "mode": 420
     },
     {
@@ -250,18 +280,33 @@
       "mode": 420
     },
     {
+      "path": ".governance/skills/api-contract-review/SKILL.md",
+      "sha256": "8704ecfa9e947e5be82d7d919859ef88555845a8ffe06baa00a8706f7803d19f",
+      "mode": 420
+    },
+    {
       "path": ".governance/skills/bounded-worker/SKILL.md",
       "sha256": "55490c8f7ab006e00971087ee6b5dec06b660095b4ccaf31f53651d2bf54c9ab",
       "mode": 420
     },
     {
+      "path": ".governance/skills/context-handoff/SKILL.md",
+      "sha256": "f5ed40cdd957669affb29c8b2a16c06535184152f2ddba43d8cb2a3fc74916a2",
+      "mode": 420
+    },
+    {
       "path": ".governance/skills/delivery/SKILL.md",
-      "sha256": "3b44f2cd6118dbe77f37eecb0daa639fe46c6a8868392660f9a20785c307f503",
+      "sha256": "8baea7a334d7fc7436f577928ef866146535f9a2d1b6f153718afe773468aee1",
       "mode": 420
     },
     {
       "path": ".governance/skills/engineering-principles/SKILL.md",
-      "sha256": "c943ffa913dc5c7356cab6c862e29c35264ae2bf52e3f0a4b78a5714790d26e7",
+      "sha256": "0023ff201e5c86fbeece0d18112d42f8974b959dd1de9452967db9f93d8097f6",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/migration-safety/SKILL.md",
+      "sha256": "ee3261daff270a726f224e3200639f47177d763c5771f0b8fc2300d061e806b4",
       "mode": 420
     },
     {
@@ -306,7 +351,7 @@
     },
     {
       "path": ".governance/skills/principle-guard-the-context-window/SKILL.md",
-      "sha256": "bedee2daf63d95081fb6c8890594f03353efd54552608eb127e6a3e6a6eca4ce",
+      "sha256": "305ca24355321a352d16167631c76cb59e57f6bab73a76cfc8fa5e67031c55e1",
       "mode": 420
     },
     {
@@ -316,7 +361,7 @@
     },
     {
       "path": ".governance/skills/principle-make-operations-idempotent/SKILL.md",
-      "sha256": "1752c0ca33ea282ca7b0b7b6784ed8b2f530fc2e991077c8caaaa85abc1d89f7",
+      "sha256": "88e128942acee4c615fcbbdfab76d21b42c0ef30215472cd329df87e07ac4389",
       "mode": 420
     },
     {
@@ -336,7 +381,7 @@
     },
     {
       "path": ".governance/skills/principle-never-block-on-the-human/SKILL.md",
-      "sha256": "78f1dcb6bdd30f6bfd07d60429deaf3a49bfbcf28d9d1fc0f3a2bc874b061c96",
+      "sha256": "eac1a734279d62eb11bc9a4ad1c979e87c8b4db843f8405f0be557babcbf38d7",
       "mode": 420
     },
     {
@@ -381,7 +426,17 @@
     },
     {
       "path": ".governance/skills/project-initialisation/SKILL.md",
-      "sha256": "c7f8faf78737e1b10977386dc24b05a75c06b53363db86c5a1f894578d6595a3",
+      "sha256": "189cc62e55b19ae32d8058bb622843c8be85d0bb03cf84fe44035cb958e3bddb",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/search-first/SKILL.md",
+      "sha256": "b8c496ec26fc03f101c716beee129c880347b33f313271b15c1a8515b8ec0fae",
+      "mode": 420
+    },
+    {
+      "path": ".governance/skills/security-review/SKILL.md",
+      "sha256": "00c69b8a3c6f31970a2dee3b0f1fb396b73d19078f63944940354e25ca922da6",
       "mode": 420
     },
     {
@@ -391,7 +446,7 @@
     },
     {
       "path": ".governance/skills/session-initialisation/SKILL.md",
-      "sha256": "40ab7782f40012c0bef17c637eb1b6277bf74d38a336547914a3d32d5bc0a6b3",
+      "sha256": "481e60627fe07975def7f4730158795af534c8a508487fd60a6581afe54f97fb",
       "mode": 420
     },
     {
@@ -646,12 +701,12 @@
     },
     {
       "path": ".governance/skills/worker-coordination/SKILL.md",
-      "sha256": "0f19e315e839ba3d80933c36253e29745c2974b53d493193bb2dfa9c0f23332f",
+      "sha256": "4b09102c12c26ebf1983b161fcae558e401e66d3ffae122f883611e1cde100a2",
       "mode": 420
     },
     {
       "path": ".governance/source-provenance.json",
-      "sha256": "2e9cf540378d625eaa6d756e6726d4efc5d0e1d51006c75ee17c1f08192fa044",
+      "sha256": "3be2ca041cc9809b1f146a6ceff08a67e51fdb73e1ec1a5d3e0a1b575b3967eb",
       "mode": 420
     },
     {
@@ -706,7 +761,7 @@
     },
     {
       "path": ".governance/tests/review.test.mjs",
-      "sha256": "468dc0636121183a839c3303a98f21ddeb277a98aa8e9007897441a007641336",
+      "sha256": "e2921275d250a83324811a025f758f9aacdd04892498c3ba4b3ede3e1eef5ac1",
       "mode": 420
     },
     {
@@ -716,17 +771,17 @@
     },
     {
       "path": ".governance/tests/test_install.py",
-      "sha256": "8dff1af1464b7a64bacbbea0ff2f4cf3d65e0972ae70f4cc392d24a6ff27610e",
+      "sha256": "1b6e779b5d15bd97e44c72dfc92ef9dd11f3ae021fba7ed3d2a88a69d8214318",
       "mode": 420
     },
     {
       "path": ".governance/tests/ui_skill.test.mjs",
-      "sha256": "f43e5e0641df764e55bca384324cad442265f5e39aa8a0d4a414e2489e7a8615",
+      "sha256": "43e6f70a92674ccb208a0527b063659899745fc1d5fdc2ee6e16fd76e8781da9",
       "mode": 420
     },
     {
       "path": ".governance/worker-provenance.json",
-      "sha256": "121cec7e234644cf10a0ca52f68d9b05a7810ab68dbf065241e6b694aa8d070a",
+      "sha256": "298ded640b65bb010a998b8f1161946ea4335c5b6899b92e2a04669e3ab1aa74",
       "mode": 420
     },
     {
@@ -741,7 +796,7 @@
     },
     {
       "path": ".governance/worker/dispatch.py",
-      "sha256": "c7362b55579e2e5fd8f7cc0aa61b964f8a20559b9603b94c321ba59083068cdb",
+      "sha256": "9362e1e7680fbdcbb4b629431b35a014882707063c73d6334302466200faff0f",
       "mode": 420
     },
     {
@@ -761,7 +816,7 @@
     },
     {
       "path": ".governance/worker/test_worker.py",
-      "sha256": "6300224ac85aeb451da91f666b7890241b896e1785682b099ff7e865efca602f",
+      "sha256": "a438edf86dcef4da9cf1cdbb94342eb0e191cf7641e79911f9745b0e53be9941",
       "mode": 420
     },
     {
@@ -771,7 +826,7 @@
     },
     {
       "path": ".governance/worker/worker.py",
-      "sha256": "fbc9ae7bd9873aae5953c02adbf0c855df6f0a297b98701d1d8563259dcf3744",
+      "sha256": "33e884b17b05e26586b72d96fcc60a57f69879995758a19e2739a3d740e187bf",
       "mode": 420
     },
     {

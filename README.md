@@ -76,7 +76,8 @@ the saved working draft.
 
 - Node.js 20.9 or newer; Node.js 22 LTS is recommended.
 - pnpm 10.32.1.
-- An API key and model name for OpenAI or another compatible Responses API provider.
+- Either a GitHub Copilot subscription with CLI OAuth access, or an API key and model name for an OpenAI-compatible Responses API provider.
+- VS Code 1.137 or newer for the recommended local VS Code provider bridge.
 - Chrome for the end-to-end browser test.
 
 ### Installation
@@ -101,10 +102,55 @@ the saved working draft.
    cp apps/web/.env.example apps/web/.env.local
    ```
 
-4. Set at least `OPENAI_API_KEY` and `OPENAI_MODEL` in
-   `apps/web/.env.local`.
+4. Choose a provider in `apps/web/.env.local`.
+
+   For local testing through the signed-in VS Code Copilot provider:
 
    ```dotenv
+   MODEL_PROVIDER=vscode-agent-host
+   VSCODE_AGENT_HOST_MODEL=gpt-5.6-sol
+   VSCODE_AGENT_HOST_TIMEOUT_MS=300000
+   DATA_MODEL_DB_FILE=data-model-agent.db
+   ```
+
+   Build the local UI extension, then launch an Extension Development Host:
+
+   ```sh
+   pnpm build:vscode-provider
+   code --extensionDevelopmentPath=apps/vscode-provider --new-window .
+   ```
+
+   To install the compiled extension for subsequent normal VS Code windows, run
+   `pnpm --dir apps/vscode-provider install:local` and reload VS Code.
+
+   The extension listens on a user-local named pipe or Unix socket and calls the supported
+   `vscode.lm` API. It does not expose an HTTP port, provider credential or tool. A random local
+   bridge token and endpoint are written to a user-only connection record. The first request must
+   come from an explicit **Generate** or chat action and may display VS Code's model-consent dialog.
+   Use `pnpm --dir apps/vscode-provider check:bridge` to verify bridge health and
+   `pnpm --dir apps/vscode-provider check:models` to list models without making an inference call.
+
+   For local GitHub Copilot SDK testing:
+
+   ```dotenv
+   MODEL_PROVIDER=copilot-sdk
+   COPILOT_MODEL=gpt-5.6-sol
+   COPILOT_TIMEOUT_MS=120000
+   COPILOT_REASONING_EFFORT=xhigh
+   DATA_MODEL_DB_FILE=data-model-agent.db
+   ```
+
+   The bundled Copilot CLI uses the signed-in user's GitHub OAuth credentials. Model calls use
+   the user's Copilot entitlement and may count as premium requests. The server exposes no tools,
+   rejects permission requests and deletes each local SDK session after the structured response.
+   Sign in once with the GitHub Copilot CLI before starting the server; the SDK reads credentials
+   from `COPILOT_HOME` (or `~/.copilot`). On managed Windows devices, IT may need to approve the
+   SDK's signed `copilot-runtime.exe`.
+
+   For an OpenAI-compatible Responses API:
+
+   ```dotenv
+   MODEL_PROVIDER=openai
    OPENAI_API_KEY=your-provider-key
    OPENAI_BASE_URL=https://api.openai.com/v1
    OPENAI_MODEL=your-approved-model
@@ -122,20 +168,30 @@ the saved working draft.
 
 6. Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
-`OPENAI_BASE_URL` and `OPENAI_MODEL` provide the initial settings. You can change both
-from the application's **Settings** panel without restarting. The API key remains a
-server-side environment variable and is never displayed or stored by the settings UI.
+The provider, configured model and OpenAI-compatible base URL provide defaults for new projects.
+You can change those defaults from **Settings** without restarting. Each project stores its own
+provider/model selection, initialized from those defaults, so changing global settings does not
+silently alter an existing model. Credentials remain server-side and are never displayed or stored
+by the settings UI.
 
 ## Configuration
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `OPENAI_API_KEY` | Yes | — | Server-side credential for the configured provider. |
+| `MODEL_PROVIDER` | No | `openai` | Provider adapter: `openai`, `copilot-sdk` or `vscode-agent-host`. |
+| `OPENAI_API_KEY` | OpenAI mode | — | Server-side credential for the OpenAI-compatible provider. |
 | `OPENAI_BASE_URL` | No | `https://api.openai.com/v1` | Initial OpenAI-compatible API base URL. |
-| `OPENAI_MODEL` | Yes | — | Initial provider model name. |
+| `OPENAI_MODEL` | OpenAI mode | — | Initial OpenAI-compatible provider model name. |
 | `OPENAI_TIMEOUT_MS` | No | `120000` | Maximum duration of a generation or chat request. |
 | `OPENAI_REASONING_EFFORT` | No | `low` | Reasoning effort sent to compatible providers. |
 | `OPENAI_MAX_OUTPUT_TOKENS` | No | `8000` | Combined response budget for a provider request. |
+| `COPILOT_MODEL` | Copilot mode | — | Model ID exposed to the signed-in Copilot account. |
+| `COPILOT_TIMEOUT_MS` | No | `120000` | Maximum time to wait for the Copilot SDK session. |
+| `COPILOT_REASONING_EFFORT` | No | `high` | Copilot reasoning effort (`low` through `max`). |
+| `COPILOT_HOME` | No | `~/.copilot` | Copilot CLI credential and state directory. |
+| `VSCODE_AGENT_HOST_MODEL` | VS Code mode | — | Copilot model ID selected through `vscode.lm`. |
+| `VSCODE_AGENT_HOST_CONNECTION_FILE` | No | `~/.data-model-agent/vscode-provider-v2.json` | Machine-local connection record shared with the extension setting. |
+| `VSCODE_AGENT_HOST_TIMEOUT_MS` | No | `300000` | Maximum time to wait for a VS Code language-model response. |
 | `DATA_MODEL_DB_FILE` | No | `data-model-agent.db` | SQLite filename under `apps/web/data/`. |
 
 ## Usage
@@ -144,12 +200,18 @@ server-side environment variable and is never displayed or stored by the setting
 2. Attach any relevant Markdown, schema, SQL, DDL or JSON files.
 3. Choose **Save model** to keep the intake without contacting the provider, or
    **Generate draft** to create the first canonical model.
-4. Review the live Mermaid or draw.io view alongside the model assistant. Answer the
+4. Follow the durable generation job's phases, elapsed time, heartbeat and provider transcript.
+   The job survives page reloads; jobs still running after an application restart are marked
+   interrupted and can be retried.
+5. In the model detail screen, edit the persistent requirements, attachment text, provider and
+   model used by subsequent requests. Save those generation inputs without contacting the provider.
+6. The canonical model changes only after the complete response passes schema and domain validation.
+7. Review the live Mermaid or draw.io view alongside the model assistant. Answer the
    displayed clarification question or request another change in chat.
-5. Refine the persistent model instructions and structured model fields. Draft edits
+8. Refine the structured model fields. Draft edits
    autosave locally.
-6. Review assumptions, warnings and canonical JSON before selecting **Save version**.
-7. Download Mermaid or draw.io from version history, or reopen a prior version as a new
+9. Review assumptions, warnings and canonical JSON before selecting **Save version**.
+10. Download Mermaid or draw.io from version history, or reopen a prior version as a new
    draft.
 
 Generation and assistant messages send the current requirements, source context and model

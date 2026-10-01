@@ -108,11 +108,11 @@ class WorkerTests(unittest.TestCase):
         with patch.object(w, 'runtime_command', side_effect=command):
             w.delegate(['sum.py', 'new.py'], 'Fix add and test it', timeout, scope, 'sum', attempt, self.worker_profile)
 
-    def test_two_corrections_require_reconciled_predecessors_and_batch_budget(self):
+    def test_three_corrections_require_reconciled_predecessors_and_stable_task_identity(self):
         scope = self.prepare_scope()
         activation_path = self.repo/'.codex/delegations/activation.json'
         activation = json.loads(activation_path.read_text())
-        activation['maxAttempts'] = 3
+        activation['maxAttempts'] = 4
         w.write_json(activation_path, activation)
         def attempt(number, operator):
             before = set((self.repo/'.codex/delegations').glob('worker-*/result.json'))
@@ -135,13 +135,20 @@ class WorkerTests(unittest.TestCase):
         w.write_json(activation_path, activation)
         with self.assertRaises(w.Failure) as error: attempt(3, '+')
         self.assertEqual(error.exception.code, 23)
-        activation['maxAttempts'] = 3
+        activation['maxAttempts'] = 4
         w.write_json(activation_path, activation)
-        third = attempt(3, '+')
+        third = attempt(3, '*')
         self.assertEqual(json.loads(third.read_text())['contract']['assignment']['attemptId'], 'fixture-1.sum.3')
-        with self.assertRaises(w.Failure) as error: attempt(4, '+')
+        self.decide(third)
+        activation['id'] = 'fixture-2'
+        w.write_json(activation_path, activation)
+        with self.assertRaises(w.Failure) as error: attempt(1, '+')
+        self.assertEqual(error.exception.code, 29)  # New activation cannot reset a task's retry count.
+        fourth = attempt(4, '+')
+        self.assertEqual(json.loads(fourth.read_text())['contract']['assignment']['attemptId'], 'fixture-2.sum.4')
+        with self.assertRaises(w.Failure) as error: attempt(5, '+')
         self.assertEqual(error.exception.code, 2)
-        w.apply(third.with_name('result.patch'))
+        w.apply(fourth.with_name('result.patch'))
         subprocess.run(['python3', '-B', 'test_sum.py'], check=True)
         self.assert_cleaned()
 

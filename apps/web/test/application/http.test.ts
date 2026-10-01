@@ -16,8 +16,15 @@ function harness() {
   const directory = mkdtempSync(join(tmpdir(), 'data-model-http-')); directories.push(directory);
   const repository = new SqliteModelRepository(join(directory, 'models.db'));
   const provider: ModelProvider = {
-    async generate() { return structuredClone(generatedClaimPayment); },
-    async revise() { return { ...structuredClone(generatedClaimPayment), assistantMessage: 'The model now includes recovery transactions.' }; },
+    async generate(_request, onProgress) {
+      onProgress?.({ phase: 'generating', message: 'Building the model…' });
+      onProgress?.({ phase: 'receiving', message: 'Receiving live model output…', transcriptDelta: '{"model":' });
+      return structuredClone(generatedClaimPayment);
+    },
+    async revise(_request, onProgress) {
+      onProgress?.({ phase: 'generating', message: 'Updating the model…' });
+      return { ...structuredClone(generatedClaimPayment), assistantMessage: 'The model now includes recovery transactions.' };
+    },
   };
   return { repository, service: new ModelService(repository, provider, { baseUrl: DEFAULT_PROVIDER_BASE_URL, model: 'test-model' }, true) };
 }
@@ -62,6 +69,27 @@ describe('project HTTP boundary', () => {
     repository.close();
   });
 
+  it('streams provider progress before the validated project result', async () => {
+    const { repository, service } = harness();
+    const created = await (await createProject(new Request('http://local/api/projects', {
+      method: 'POST', body: JSON.stringify({ title: 'Claim Payment', requirements: 'Model claims.', sources: [] }),
+    }), service)).json();
+    const response = await generateDraft(created.id, new Request('http://local', {
+      method: 'POST',
+      headers: { accept: 'application/x-ndjson' },
+      body: '{}',
+    }), service);
+    expect(response.headers.get('content-type')).toContain('application/x-ndjson');
+    const events = (await response.text()).trim().split('\n').map(line => JSON.parse(line));
+    expect(events).toEqual([
+      { type: 'progress', progress: { phase: 'generating', message: 'Building the model…' } },
+      { type: 'progress', progress: { phase: 'receiving', message: 'Receiving live model output…', transcriptDelta: '{"model":' } },
+      { type: 'progress', progress: { phase: 'saving', message: 'Saving the validated working draft…' } },
+      { type: 'result', project: expect.objectContaining({ id: created.id, draft: expect.objectContaining({ model: expect.any(Object) }) }) },
+    ]);
+    repository.close();
+  });
+
   it('updates and deletes an ungenerated project through observable responses', async () => {
     const { repository, service } = harness();
     const created = await (await createProject(new Request('http://local/api/projects', {
@@ -98,14 +126,14 @@ describe('project HTTP boundary', () => {
   it('reads and saves provider settings without returning a credential', async () => {
     const { repository, service } = harness();
     expect(await (await getProviderSettings(service)).json()).toEqual({
-      baseUrl: 'https://api.openai.com/v1', model: 'test-model', apiKeyConfigured: true,
+      baseUrl: 'https://api.openai.com/v1', model: 'test-model', providerType: 'openai', apiKeyConfigured: true,
     });
     const response = await saveProviderSettings(new Request('http://local/api/settings/provider', {
-      method: 'PUT', body: JSON.stringify({ baseUrl: 'https://models.example/v1/', model: 'claims-model' }),
+      method: 'PUT', body: JSON.stringify({ providerType: 'openai', baseUrl: 'https://models.example/v1/', model: 'claims-model' }),
     }), service);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      baseUrl: 'https://models.example/v1', model: 'claims-model', apiKeyConfigured: true,
+      baseUrl: 'https://models.example/v1', model: 'claims-model', providerType: 'openai', apiKeyConfigured: true,
     });
     const invalid = await saveProviderSettings(new Request('http://local/api/settings/provider', {
       method: 'PUT', body: JSON.stringify({ baseUrl: 'ftp://models.example/v1', model: 'replacement' }),
@@ -113,7 +141,7 @@ describe('project HTTP boundary', () => {
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({ error: 'provider-settings-invalid' });
     expect(await (await getProviderSettings(service)).json()).toEqual({
-      baseUrl: 'https://models.example/v1', model: 'claims-model', apiKeyConfigured: true,
+      baseUrl: 'https://models.example/v1', model: 'claims-model', providerType: 'openai', apiKeyConfigured: true,
     });
     repository.close();
   });

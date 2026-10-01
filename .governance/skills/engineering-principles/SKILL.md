@@ -5,4 +5,4 @@ description: Select conditional engineering principles for scoped design, implem
 
 # Engineering Principles
 
-Use the trigger table in [principles.md](../../principles.md). Read each applicable SKILL.md in full before applying it. The five general principles and root project policy govern all code; conditional principles require evidence-backed dispositions in source-bound review. Names, summaries and hashes are not proof of reading or judgment. These skills do not expand scope, authorize extra workers/prototypes/testing campaigns or waive approval.
+Use the trigger table in [principles.md](../../principles.md). Read each applicable SKILL.md in full before applying it. The five general principles and root project policy govern all code; conditional principles require evidence-backed dispositions in source-bound review. Names, summaries and hashes are not proof of reading or judgment. These skills do not expand scope or waive protected approvals. Use the coordination policy when delegation is appropriate and available.

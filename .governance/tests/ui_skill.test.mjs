@@ -21,7 +21,7 @@ test('UI skill is selectable but narrowly routed to visual and interactive work'
 test('project initialisation is selectable with guided one-question intake', () => {
   assert.match(initializer, /default_prompt:.*\$dev-stack-project-initialisation/);
   assert.match(initializer, /project name and GitHub owner one question at a time/);
-  assert.match(initializer, /https:\/\/github\.com\/EtnaJamesCapital\/dev-stack\.git/);
+  assert.match(initializer, /https:\/\/github\.com\/MikeS071\/dev-stack\.git/);
   const prompt = readFileSync(new URL('.governance/docs/initialise-prompt.md', root), 'utf8');
   assert.match(prompt, /This current directory is empty/);
   assert.match(prompt, /GitHub repository into a temporary directory/);

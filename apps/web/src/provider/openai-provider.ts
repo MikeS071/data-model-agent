@@ -1,4 +1,4 @@
-import type { GenerationRequest, ModelProvider, RevisionRequest } from './model-provider';
+import type { GenerationRequest, ModelProvider, ProviderProgressHandler, RevisionRequest } from './model-provider';
 import { DEFAULT_PROVIDER_BASE_URL, normalizeProviderBaseUrl } from '@/domain/provider-settings';
 
 const text = { type: 'string', minLength: 1 } as const;
@@ -93,12 +93,12 @@ interface ProviderOptions {
   now?: () => number;
 }
 
-const configuredInteger = (value: number, minimum: number, maximum: number) => {
+export const configuredInteger = (value: number, minimum: number, maximum: number) => {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error('provider-config-invalid');
   return value;
 };
 
-const environmentInteger = (value: string | undefined, fallback: number, minimum: number, maximum: number) => {
+export const environmentInteger = (value: string | undefined, fallback: number, minimum: number, maximum: number) => {
   if (value === undefined) return fallback;
   if (!/^\d+$/u.test(value)) throw new Error('provider-config-invalid');
   return configuredInteger(Number(value), minimum, maximum);
@@ -119,8 +119,33 @@ function outputText(value: unknown): string {
   throw new Error('provider-output-missing');
 }
 
-const sourceText = (request: GenerationRequest) => request.sources
+export const sourceText = (request: GenerationRequest) => request.sources
   .map(source => `--- ${source.name} (${source.kind}) ---\n${source.content}`).join('\n\n');
+
+export const generationInput = (request: GenerationRequest) => {
+  const sources = sourceText(request);
+  return [
+    `Requirements:\n${request.requirements}`,
+    sources ? `Source artifacts:\n${sources}` : '',
+    request.currentModel ? `Current canonical model:\n${JSON.stringify(request.currentModel)}` : '',
+    request.clarification ? `Latest clarification:\n${request.clarification}` : '',
+  ].filter(Boolean).join('\n\n');
+};
+
+export const revisionInput = (request: RevisionRequest) => {
+  const sources = sourceText(request);
+  return [
+    `Requirements:\n${request.requirements}`,
+    sources ? `Source artifacts:\n${sources}` : '',
+    `Current canonical model:\n${JSON.stringify(request.currentModel)}`,
+    request.clarification ? `Open clarification:\n${request.clarification}` : '',
+    request.history.length ? `Recent project conversation:\n${JSON.stringify(request.history)}` : '',
+    `New user message:\n${request.message}`,
+  ].filter(Boolean).join('\n\n');
+};
+
+export const GENERATION_INSTRUCTIONS = 'Create a conservative data-model draft. Preserve supplied facts, label assumptions, emit warnings, and ask clarification questions instead of inventing ambiguous relationships.';
+export const REVISION_INSTRUCTIONS = 'Act as a careful data-modelling collaborator. Respond briefly to the user, then return the complete revised canonical model. If the user answers the open clarification, apply the answer and remove or advance that question; otherwise retain unresolved questions unless the requested change invalidates them. Preserve stable IDs and supplied facts unless the requested change requires otherwise. Keep assumptions, warnings and clarification questions explicit; never invent ambiguous relationships.';
 
 export class OpenAIModelProvider implements ModelProvider {
   readonly #apiKey: string;
@@ -178,14 +203,16 @@ export class OpenAIModelProvider implements ModelProvider {
     try { this.#diagnostics(event); } catch { /* Diagnostics must never change provider behavior. */ }
   }
 
-  async #complete(input: string, formatName: string, schema: object, instructions: string): Promise<unknown> {
+  async #complete(input: string, formatName: string, schema: object, instructions: string, onProgress?: ProviderProgressHandler, signal?: AbortSignal): Promise<unknown> {
     const startedAt = this.#now();
     let response: Response;
     try {
+      onProgress?.({ phase: 'connecting', message: 'Connecting to the configured provider…' });
+      onProgress?.({ phase: 'generating', message: `${this.#model} is building the model…` });
       response = await this.#fetcher(`${this.#baseUrl}/responses`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.#apiKey}`, 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(this.#timeoutMs),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(this.#timeoutMs)]) : AbortSignal.timeout(this.#timeoutMs),
         body: JSON.stringify({
           model: this.#model,
           store: false,
@@ -213,6 +240,7 @@ export class OpenAIModelProvider implements ModelProvider {
       throw new Error('provider-failed');
     }
     let body: unknown;
+    onProgress?.({ phase: 'validating', message: 'Validating the completed model…' });
     try { body = await response.json(); } catch {
       this.#record('output-invalid', startedAt, response);
       throw new Error('provider-output-invalid');
@@ -232,37 +260,25 @@ export class OpenAIModelProvider implements ModelProvider {
     }
   }
 
-  async generate(request: GenerationRequest): Promise<unknown> {
-    const sources = sourceText(request);
-    const input = [
-      `Requirements:\n${request.requirements}`,
-      sources ? `Source artifacts:\n${sources}` : '',
-      request.currentModel ? `Current canonical model:\n${JSON.stringify(request.currentModel)}` : '',
-      request.clarification ? `Latest clarification:\n${request.clarification}` : '',
-    ].filter(Boolean).join('\n\n');
+  async generate(request: GenerationRequest, onProgress?: ProviderProgressHandler, signal?: AbortSignal): Promise<unknown> {
     return this.#complete(
-      input,
+      generationInput(request),
       'data_model_generation',
       generationJsonSchema,
-      'Create a conservative data-model draft. Preserve supplied facts, label assumptions, emit warnings, and ask clarification questions instead of inventing ambiguous relationships.',
+      GENERATION_INSTRUCTIONS,
+      onProgress,
+      signal,
     );
   }
 
-  async revise(request: RevisionRequest): Promise<unknown> {
-    const sources = sourceText(request);
-    const input = [
-      `Requirements:\n${request.requirements}`,
-      sources ? `Source artifacts:\n${sources}` : '',
-      `Current canonical model:\n${JSON.stringify(request.currentModel)}`,
-      request.clarification ? `Open clarification:\n${request.clarification}` : '',
-      request.history.length ? `Recent project conversation:\n${JSON.stringify(request.history)}` : '',
-      `New user message:\n${request.message}`,
-    ].filter(Boolean).join('\n\n');
+  async revise(request: RevisionRequest, onProgress?: ProviderProgressHandler, signal?: AbortSignal): Promise<unknown> {
     return this.#complete(
-      input,
+      revisionInput(request),
       'data_model_revision',
       revisionJsonSchema,
-      'Act as a careful data-modelling collaborator. Respond briefly to the user, then return the complete revised canonical model. If the user answers the open clarification, apply the answer and remove or advance that question; otherwise retain unresolved questions unless the requested change invalidates them. Preserve stable IDs and supplied facts unless the requested change requires otherwise. Keep assumptions, warnings and clarification questions explicit; never invent ambiguous relationships.',
+      REVISION_INSTRUCTIONS,
+      onProgress,
+      signal,
     );
   }
 }

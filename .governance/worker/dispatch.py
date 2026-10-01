@@ -97,7 +97,7 @@ class Dispatch:
         require(self.directory.resolve() == self.directory and self.directory.is_dir(), 'CONTROL_UNSAFE')
         require(self.directory.stat().st_uid == os.getuid() and self.directory.stat().st_mode & 0o077 == 0, 'CONTROL_UNSAFE')
         self.pool = AdmissionPool(self.directory)
-        require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,31}', task_id) and attempt in (1, 2, 3), 'INVALID_REQUEST')
+        require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,31}', task_id) and attempt in (1, 2, 3, 4), 'INVALID_REQUEST')
         self.task_id, self.attempt, self.seconds = task_id, attempt, seconds
         self.activation = private_json(self.directory / 'activation.json')
         require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,31}', self.activation['id']), 'CONTROL_UNSAFE')
@@ -157,9 +157,21 @@ class Dispatch:
         # Admission counts reserved seats too. Do not subtract those seats twice.
         remaining = available + sum(r['attempt'].startswith(active['id'] + '.') and r['attempt'] != self.attempt_id
                                     and r['phase'] != 'RELEASED' for r in rows)
-        if self.attempt > 1:
-            previous = next((path.parent for path, row in self.pool.records()
-                             if row['attempt'] == f"{active['id']}.{self.task_id}.{self.attempt - 1}" and row['phase'] == 'RELEASED'), None)
+        # The task/ref pair keeps its retry sequence even when an accepted scope
+        # revision requires a fresh activation record.
+        history = []
+        for path, row in self.pool.records():
+            if row['attempt'] == self.attempt_id:
+                continue
+            match = re.fullmatch(r'[A-Za-z0-9_-]+\.' + re.escape(self.task_id) + r'\.([1-4])', row['attempt'])
+            if match:
+                assignment = private_json(path.parent / 'assignment.json')
+                if assignment['id'] == self.task_id and assignment['source']['ref'] == self.ref:
+                    history.append((int(match.group(1)), path.parent, row))
+        require(self.attempt == 1 if not history else self.attempt == max(item[0] for item in history) + 1, 'RETRY_NOT_READY')
+        if history:
+            previous = next((path for number, path, row in history
+                             if number == self.attempt - 1 and row['phase'] == 'RELEASED'), None)
             require(previous is not None, 'RETRY_NOT_READY')
             receipt = private_json(previous / 'result.json')
             require(receipt['code'] != 0 or private_json(previous / 'decision.json')['decision'] == 'rejected', 'RETRY_NOT_READY')

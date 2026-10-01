@@ -39,4 +39,3 @@ export function inspectBaseline({ cwd, scope, project }) {
     requiredLeadReview: ["authority-and-intent-coverage", "dirty-work-ownership", "task-specific-instructions", "live-dependencies-and-target"],
     nextAction: "Complete lead review in the existing task record before implementation or dispatch" };
 }
-

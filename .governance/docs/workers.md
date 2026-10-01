@@ -25,8 +25,9 @@ an unused approved worker branch; source.sha is the lead's exact clean commit. I
 committed `.governance/project.json` supplies repository identity and permitted prefixes.
 Use the actual implementation for serialization and validation; hashes alone are never approval.
 The primary `config.json` must be enabled within the approved runtime bound. Capacity is
-the minimum of configured, approved, runtime and remaining calls. Two corrections after
-attempt1 are supported; wall time and call limits remain explicit. No automatic retry.
+the minimum of configured, approved, runtime and remaining calls. Up to three corrections
+after attempt 1 are supported; the task ID and worker ref keep their attempt sequence
+across new activation records. Wall time and call limits remain explicit. No automatic retry.
 
 ```sh
 tools/delegate-worker --worker-config .governance-artifacts/worker.toml --scope-record .governance-artifacts/scope.json --task-id bounded-fix --scope 'src/example.ts' --attempt 1 --timeout 600 -- 'Implement the recorded scope; return criterion proof and remaining defects.'

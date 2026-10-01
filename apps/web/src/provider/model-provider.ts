@@ -17,7 +17,17 @@ export interface RevisionRequest extends GenerationRequest {
   history: RevisionMessage[];
 }
 
+export type ProviderProgressPhase = 'connecting' | 'selecting-model' | 'preparing' | 'generating' | 'receiving' | 'validating' | 'saving';
+
+export interface ProviderProgress {
+  phase: ProviderProgressPhase;
+  message: string;
+  transcriptDelta?: string;
+}
+
+export type ProviderProgressHandler = (progress: ProviderProgress) => void;
+
 export interface ModelProvider {
-  generate(request: GenerationRequest): Promise<unknown>;
-  revise(request: RevisionRequest): Promise<unknown>;
+  generate(request: GenerationRequest, onProgress?: ProviderProgressHandler, signal?: AbortSignal): Promise<unknown>;
+  revise(request: RevisionRequest, onProgress?: ProviderProgressHandler, signal?: AbortSignal): Promise<unknown>;
 }
