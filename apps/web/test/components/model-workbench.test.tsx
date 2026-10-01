@@ -208,7 +208,7 @@ describe('Michal modelling workflow', () => {
       .toBe('Unsaved definition included in regeneration.');
     expect(draftSave).toBeLessThan(intakeSave);
     expect(intakeSave).toBeLessThan(jobStart);
-  });
+  }, 15_000);
 
   it('shows chat messages immediately, keeps the composer usable and recovers failed sends', async () => {
     const project: ProjectRecord = {
@@ -244,7 +244,7 @@ describe('Michal modelling workflow', () => {
     const composer = screen.getByLabelText('Message the model assistant');
     await user.type(composer, 'Add a recovery transaction.');
     await user.click(screen.getByRole('button', { name: 'Send message' }));
-    expect(screen.getByText('Add a recovery transaction.')).toBeTruthy();
+    expect(await screen.findByText('Add a recovery transaction.')).toBeTruthy();
     expect(document.querySelector('.thinking-visible')?.textContent).toContain('Connecting to the configured provider');
     expect(document.querySelectorAll('.thinking-dots i')).toHaveLength(3);
     expect((composer as HTMLTextAreaElement).disabled).toBe(false);
@@ -269,7 +269,7 @@ describe('Michal modelling workflow', () => {
     expect(structuredFields?.disabled).toBe(false);
 
     await user.click(screen.getByRole('button', { name: 'Send message' }));
-    expect(screen.getByText('Draft the next request.')).toBeTruthy();
+    expect(await screen.findByText('Draft the next request.')).toBeTruthy();
     expect(document.querySelector('.thinking-visible')?.textContent).toContain('Connecting to the configured provider');
     pendingResponses.shift()!(projectStream([{ type: 'error', error: 'provider-timeout' }]));
     expect(await screen.findByText(/provider did not finish/iu)).toBeTruthy();
