@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SqliteModelRepository } from '@/storage/sqlite-repository';
 import { claimPaymentModel, claimSources, generatedClaimPayment } from '../fixtures/claim-payment';
@@ -9,6 +10,94 @@ const directories: string[] = [];
 afterEach(() => { while (directories.length) rmSync(directories.pop()!, { recursive: true, force: true }); });
 
 describe('SQLite project and version lifecycle', () => {
+  it('migrates a populated schema-v7 database without changing existing source rows', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'data-model-v7-')); directories.push(directory);
+    const path = join(directory, 'models.db');
+    const database = new DatabaseSync(path);
+    database.exec(`
+      CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);
+      INSERT INTO schema_migrations(version) VALUES (7);
+      CREATE TABLE projects(id TEXT PRIMARY KEY,title TEXT NOT NULL,requirements TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+      CREATE TABLE source_artifacts(id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,name TEXT NOT NULL,kind TEXT NOT NULL,content TEXT NOT NULL,ordinal INTEGER NOT NULL,UNIQUE(project_id,ordinal));
+      CREATE TABLE working_drafts(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,model_json TEXT NOT NULL,assumptions_json TEXT NOT NULL,warnings_json TEXT NOT NULL,questions_json TEXT NOT NULL,updated_at TEXT NOT NULL);
+      CREATE TABLE model_versions(id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,version_number INTEGER NOT NULL,model_json TEXT NOT NULL,assumptions_json TEXT NOT NULL,warnings_json TEXT NOT NULL,questions_json TEXT NOT NULL,sources_json TEXT NOT NULL,mermaid TEXT NOT NULL,drawio TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(project_id,version_number));
+      CREATE TABLE generation_jobs(id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,status TEXT NOT NULL,provider_type TEXT NOT NULL,base_url TEXT NOT NULL,model TEXT NOT NULL,request_json TEXT NOT NULL,phase TEXT NOT NULL,message TEXT NOT NULL,transcript TEXT NOT NULL DEFAULT '',error_code TEXT,created_at TEXT NOT NULL,started_at TEXT,heartbeat_at TEXT,completed_at TEXT,updated_at TEXT NOT NULL);
+      INSERT INTO projects VALUES ('project-v7','Existing','Keep this requirement.','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z');
+      INSERT INTO source_artifacts VALUES ('source-v7','project-v7','existing.ddl','ddl','CREATE TABLE existing(id TEXT);',0);
+    `);
+    database.prepare('INSERT INTO working_drafts VALUES (?,?,?,?,?,?)').run(
+      'project-v7',
+      JSON.stringify(generatedClaimPayment.model),
+      JSON.stringify(generatedClaimPayment.assumptions),
+      JSON.stringify(generatedClaimPayment.warnings),
+      JSON.stringify(generatedClaimPayment.clarificationQuestions),
+      '2026-01-01T00:00:00.000Z',
+    );
+    database.prepare('INSERT INTO model_versions VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(
+      'version-v7',
+      'project-v7',
+      1,
+      JSON.stringify(generatedClaimPayment.model),
+      JSON.stringify(generatedClaimPayment.assumptions),
+      JSON.stringify(generatedClaimPayment.warnings),
+      JSON.stringify(generatedClaimPayment.clarificationQuestions),
+      JSON.stringify([{ id: 'source-v7', projectId: 'project-v7', name: 'existing.ddl', kind: 'ddl', content: 'CREATE TABLE existing(id TEXT);', ordinal: 0 }]),
+      'erDiagram',
+      '<mxfile />',
+      '2026-01-01T00:00:00.000Z',
+    );
+    database.prepare('INSERT INTO generation_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(
+      'job-v7',
+      'project-v7',
+      'failed',
+      'openai',
+      'https://api.openai.com/v1',
+      'test-model',
+      JSON.stringify({ requirements: 'Keep this requirement.', sources: [], currentModel: null, clarification: null }),
+      'failed',
+      'Prior failure.',
+      '',
+      'provider-failed',
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:01.000Z',
+      '2026-01-01T00:00:02.000Z',
+      '2026-01-01T00:00:02.000Z',
+    );
+    database.close();
+
+    const repository = new SqliteModelRepository(path);
+    expect(repository.getProject('project-v7')).toEqual(expect.objectContaining({
+      title: 'Existing',
+      requirements: 'Keep this requirement.',
+      sources: [expect.objectContaining({ name: 'existing.ddl', content: 'CREATE TABLE existing(id TEXT);' })],
+      draft: generatedClaimPayment,
+    }));
+    expect(repository.getVersion('project-v7', 1)?.model).toEqual(generatedClaimPayment.model);
+    expect(repository.getGenerationJob('job-v7')).toEqual(expect.objectContaining({
+      status: 'failed', message: 'Prior failure.', retryOfJobId: null,
+    }));
+    const migrated = new DatabaseSync(path);
+    expect((migrated.prepare('SELECT MAX(version) AS value FROM schema_migrations').get() as { value: number }).value).toBe(8);
+    expect((migrated.prepare(`SELECT COUNT(*) AS value FROM sqlite_master WHERE type='table'
+      AND name IN ('csv_intake_sessions','project_csv_masking_keys','csv_source_analyses')`).get() as { value: number }).value).toBe(3);
+    migrated.close();
+    repository.close();
+  });
+
+  it('rejects an unknown newer schema before creating application tables', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'data-model-newer-')); directories.push(directory);
+    const path = join(directory, 'models.db');
+    const database = new DatabaseSync(path);
+    database.exec('CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY); INSERT INTO schema_migrations(version) VALUES (9);');
+    database.close();
+
+    expect(() => new SqliteModelRepository(path)).toThrow('database-schema-newer');
+    const inspected = new DatabaseSync(path);
+    expect((inspected.prepare("SELECT COUNT(*) AS value FROM sqlite_master WHERE type='table' AND name='projects'").get() as { value: number }).value).toBe(0);
+    inspected.close();
+  });
+
   it('persists non-secret provider settings without changing saved projects', () => {
     const directory = mkdtempSync(join(tmpdir(), 'data-model-agent-')); directories.push(directory);
     const repository = new SqliteModelRepository(join(directory, 'models.db'));

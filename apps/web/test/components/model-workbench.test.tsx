@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ModelWorkbench } from '@/components/model-workbench';
 import type { ProjectRecord } from '@/storage/sqlite-repository';
+import type { CsvAnalysis } from '@/domain/model';
 import { generatedClaimPayment } from '../fixtures/claim-payment';
 
 vi.mock('@/render/mermaid-client', () => ({
@@ -38,8 +39,118 @@ const generationJob = (
   heartbeatAt: '2026-09-22T00:00:02Z', completedAt: status === 'completed' ? '2026-09-22T00:00:03Z' : null,
   updatedAt: '2026-09-22T00:00:02Z', ...overrides,
 });
+const csvAnalysisFixture = (confirmed: boolean, intakeSessionId: string | null = 'intake-1'): CsvAnalysis => ({
+  analysisVersion: 1,
+  contentDigest: 'a'.repeat(64),
+  maskingGenerationId: 'masking-1',
+  intakeSessionId,
+  inferredHeaderMode: 'first-row',
+  headerMode: 'first-row',
+  headers: ['customer_id', 'email'],
+  rowCount: 1,
+  columnCount: 2,
+  columns: [
+    { index: 0, name: 'customer_id', inferredType: 'integer', nullable: false, nullRatio: 0, uniqueRatio: 1, minLength: 1, maxLength: 1, formats: [], sensitive: true, sensitivity: ['identifier'] },
+    { index: 1, name: 'email', inferredType: 'string', nullable: false, nullRatio: 0, uniqueRatio: 1, minLength: 13, maxLength: 13, formats: ['email'], sensitive: true, sensitivity: ['email'] },
+  ],
+  sampleRows: [{ rowIndex: 0, values: ['<masked:abc>', '<masked:def>'] }],
+  additionalSensitiveColumns: [],
+  confirmed,
+  confirmedAt: confirmed ? '2026-10-01T00:00:00.000Z' : null,
+});
 
 describe('Michal modelling workflow', () => {
+  it('reviews, masks and confirms CSV input before enabling generation', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/projects' && method === 'GET') return Response.json([]);
+      if (url === '/api/csv-analysis' && method === 'POST') {
+        const form = init?.body as FormData;
+        return Response.json({
+          content: 'customer_id,email\n1,a@example.com\n',
+          analysis: csvAnalysisFixture(form.get('confirmed') === 'true'),
+        });
+      }
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await screen.findByText('No saved models yet');
+    await user.type(screen.getByLabelText('Model name'), 'Customer model');
+    await user.type(screen.getByLabelText('Requirements'), 'Infer entities from the extract.');
+    await user.upload(screen.getByLabelText('Source files'), new File(
+      ['customer_id,email\n1,a@example.com\n'],
+      'customers.csv',
+      { type: 'text/csv' },
+    ));
+
+    const csvReview = await screen.findByRole('region', { name: 'CSV review customers.csv' });
+    expect(csvReview).toBeTruthy();
+    expect(screen.getByText('<masked:def>')).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Generate draft/u }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Confirm CSV' }));
+    await waitFor(() => expect(csvReview.textContent).toContain('CSV confirmed'));
+    expect((screen.getByRole('button', { name: /Generate draft/u }) as HTMLButtonElement).disabled).toBe(false);
+
+    await user.clear(screen.getByLabelText('Column 1'));
+    await user.type(screen.getByLabelText('Column 1'), 'customer_key');
+    expect((screen.getByRole('button', { name: /Generate draft/u }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('invalidates a confirmed CSV after raw edits and requires reanalysis', async () => {
+    const project: ProjectRecord = {
+      id: 'project-csv',
+      title: 'Customer model',
+      requirements: 'Model customers.',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z',
+      sources: [{
+        id: 'source-csv',
+        ordinal: 0,
+        name: 'customers.csv',
+        kind: 'csv',
+        content: 'customer_id,email\n1,a@example.com\n',
+        csvAnalysis: csvAnalysisFixture(true, null),
+      }],
+      draft: structuredClone(generatedClaimPayment),
+      versions: [],
+      messages: [],
+      providerSettings: testProviderSettings,
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      if (url === '/api/projects' && method === 'GET') return Response.json([{
+        id: project.id, title: project.title, updatedAt: project.updatedAt, versionCount: 0, hasDraft: true,
+      }]);
+      if (url === `/api/projects/${project.id}` && method === 'GET') return Response.json(project);
+      if (url.includes('/api/settings/provider/models')) return Response.json([{ id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol' }]);
+      if (url.endsWith('/generation-jobs') && method === 'GET') return new Response(null, { status: 204 });
+      if (url === '/api/csv-analysis' && method === 'POST') {
+        const form = init?.body as FormData;
+        return Response.json({
+          content: 'customer_id,email\n1,changed@example.com\n',
+          analysis: csvAnalysisFixture(form.get('confirmed') === 'true', null),
+        });
+      }
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await user.click(await screen.findByRole('button', { name: /Customer model/u }));
+    expect(await screen.findByRole('heading', { name: 'Claim Payment model' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Source content customers.csv'), {
+      target: { value: 'customer_id,email\n1,changed@example.com\n' },
+    });
+    expect(await screen.findByText('CSV review required')).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Regenerate with changes/u }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Analyse CSV' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirm CSV' }));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'CSV review customers.csv' }).textContent).toContain('CSV confirmed'));
+    expect((screen.getByRole('button', { name: /Regenerate with changes/u }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('creates from text and files, edits the draft, saves a version and exposes downloads', async () => {
     const project: ProjectRecord = {
       id: 'project-1', title: 'Claim Payment', requirements: 'Model claim payments.',
@@ -318,6 +429,51 @@ describe('Michal modelling workflow', () => {
     completePoll!(Response.json(generationJob(project.id, 'completed', { transcript: '{"model":{"name":"Claim Payment"}}' })));
     expect(await screen.findByRole('heading', { name: 'Claim Payment model' }, { timeout: 2500 })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Building your model' })).toBeNull();
+  });
+
+  it('preserves retry lineage while editing inputs after initial generation fails', async () => {
+    let project: ProjectRecord = {
+      id: 'project-retry', title: 'Retry model', requirements: 'Original requirements.',
+      createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
+      sources: [], draft: null, versions: [], messages: [], providerSettings: testProviderSettings,
+    };
+    const calls: Array<{ url: string; method: string; body: unknown }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input), method = init?.method ?? 'GET';
+      const body = init?.body && typeof init.body === 'string' ? JSON.parse(init.body) : null;
+      calls.push({ url, method, body });
+      if (url === '/api/projects' && method === 'GET') return Response.json([{
+        id: project.id, title: project.title, updatedAt: project.updatedAt, versionCount: 0, hasDraft: Boolean(project.draft),
+      }]);
+      if (url === `/api/projects/${project.id}` && method === 'GET') return Response.json(project);
+      if (url.includes('/api/settings/provider/models')) return Response.json([{ id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol' }]);
+      if (url.endsWith('/generation-jobs') && method === 'GET') return Response.json(generationJob(project.id, 'failed'));
+      if (url === `/api/projects/${project.id}` && method === 'PUT') {
+        project = { ...project, requirements: (body as { requirements: string }).requirements };
+        return Response.json(project);
+      }
+      if (url.endsWith('/generation-jobs') && method === 'POST') {
+        project = { ...project, draft: structuredClone(generatedClaimPayment) };
+        return Response.json(generationJob(project.id, 'completed', { retryOfJobId: 'job-1' }), { status: 202 });
+      }
+      throw new Error(`unexpected request ${method} ${url}`);
+    }));
+
+    const user = userEvent.setup();
+    render(<ModelWorkbench />);
+    await user.click(await screen.findByRole('button', { name: /Retry model/u }));
+    await user.click(await screen.findByRole('button', { name: 'Edit inputs' }));
+    await user.clear(screen.getByLabelText('Requirements'));
+    await user.type(screen.getByLabelText('Requirements'), 'Updated requirements.');
+    await user.click(screen.getByRole('button', { name: 'Retry with current inputs' }));
+
+    await screen.findByRole('heading', { name: 'Claim Payment model' });
+    const updateIndex = calls.findIndex(call => call.url === `/api/projects/${project.id}` && call.method === 'PUT');
+    const retryIndex = calls.findIndex(call => call.url.endsWith('/generation-jobs') && call.method === 'POST');
+    expect(updateIndex).toBeGreaterThanOrEqual(0);
+    expect((calls[updateIndex].body as { requirements: string }).requirements).toBe('Updated requirements.');
+    expect(calls[retryIndex].body).toEqual({ clarification: null, retryOfJobId: 'job-1' });
+    expect(updateIndex).toBeLessThan(retryIndex);
   });
 
   it('makes external transmission and AustralianSuper branding visible', async () => {

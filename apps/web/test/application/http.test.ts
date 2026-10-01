@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { chatWithModel, createProject, deleteProject, downloadVersion, generateDraft, getProviderSettings, listProjects, saveProviderSettings, saveVersion, updateProject } from '@/server/http';
+import { analyzeCsv, chatWithModel, createProject, deleteProject, downloadVersion, generateDraft, getProviderSettings, listProjects, saveProviderSettings, saveVersion, updateProject } from '@/server/http';
 import { ModelService } from '@/application/model-service';
 import type { ModelProvider } from '@/provider/model-provider';
 import { SqliteModelRepository } from '@/storage/sqlite-repository';
@@ -30,6 +30,28 @@ function harness() {
 }
 
 describe('project HTTP boundary', () => {
+  it('analyses CSV multipart bytes without persisting raw content in the intake session', async () => {
+    const { repository, service } = harness();
+    const form = new FormData();
+    form.set('file', new Blob(['customer_id,email\n1,a@example.com\n'], { type: 'text/csv' }), 'customers.csv');
+    const first = await analyzeCsv(new Request('http://local/api/csv-analysis', { method: 'POST', body: form }), service);
+    expect(first.status).toBe(200);
+    const draft = await first.json();
+    expect(draft.analysis.confirmed).toBe(false);
+    expect(draft.analysis.intakeSessionId).toEqual(expect.any(String));
+    expect(JSON.stringify(draft.analysis)).not.toContain('a@example.com');
+
+    const confirmation = new FormData();
+    confirmation.set('file', new Blob([draft.content], { type: 'text/csv' }), 'customers.csv');
+    confirmation.set('intakeSessionId', draft.analysis.intakeSessionId);
+    confirmation.set('headerMode', draft.analysis.headerMode);
+    confirmation.set('headers', JSON.stringify(draft.analysis.headers));
+    confirmation.set('confirmed', 'true');
+    const confirmed = await analyzeCsv(new Request('http://local/api/csv-analysis', { method: 'POST', body: confirmation }), service);
+    expect((await confirmed.json()).analysis.confirmed).toBe(true);
+    repository.close();
+  });
+
   it('creates, lists, generates, versions and downloads through observable responses', async () => {
     const { repository, service } = harness();
     const createdResponse = await createProject(new Request('http://local/api/projects', {
