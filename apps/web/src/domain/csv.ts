@@ -175,6 +175,7 @@ function validateCsvShapeBudget(content: string) {
       atFieldStart = false;
     }
   }
+  if (inQuotes) throw new Error('csv-malformed');
   if (recordHasData || columnCount > 1) finishRecord();
 }
 
