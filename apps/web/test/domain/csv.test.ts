@@ -5,6 +5,7 @@ import {
   decodeCsvBytes,
   distributedSampleIndexes,
 } from '@/domain/csv';
+import { MAX_CSV_SOURCE_BYTES } from '@/domain/input';
 
 const key = new Uint8Array(32).fill(7);
 const options = { key, maskingGenerationId: 'generation-1', intakeSessionId: 'intake-1' };
@@ -100,6 +101,14 @@ describe('CSV analysis boundary', () => {
     expect(() => analyzeCsvContent('a,b\n1,2\n', { ...options, headers: ['same', 'same'] })).toThrow('csv-header-invalid');
     expect(() => analyzeCsvContent(`${Array.from({ length: 251 }, (_, index) => `c${index}`).join(',')}\n${Array(251).fill('1').join(',')}\n`, options))
       .toThrow('csv-columns-exceeded');
+    expect(() => analyzeCsvContent(','.repeat(1_000_000), options)).toThrow('csv-columns-exceeded');
     expect(() => analyzeCsvContent(`value\n${'1\n'.repeat(100_001)}`, options)).toThrow('csv-rows-exceeded');
+    expect(() => analyzeCsvContent(`value\n${' \n'.repeat(100_001)}`, options)).toThrow('csv-rows-exceeded');
+    expect(() => analyzeCsvContent('a,b\n \n', options)).toThrow('csv-width-inconsistent');
+  });
+
+  it('accepts a CSV at 10 MB and rejects one byte over before decoding', () => {
+    expect(decodeCsvBytes(new Uint8Array(MAX_CSV_SOURCE_BYTES).fill(120))).toHaveLength(MAX_CSV_SOURCE_BYTES);
+    expect(() => decodeCsvBytes(new Uint8Array(MAX_CSV_SOURCE_BYTES + 1))).toThrow('source-too-large');
   });
 });

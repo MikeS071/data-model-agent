@@ -67,6 +67,10 @@ project-scoped pseudonyms. Users confirm or correct the inferred headers and exa
 complete raw CSV content is never added to provider requests or durable generation-job
 snapshots.
 
+CSV files may be up to 10 MB each. Other source files remain limited to 1 MB each, and
+normalized content across all attachments is limited to 50 MB. CSV row and column limits
+still apply independently of file size.
+
 ## Technology
 
 - Next.js 16 and React 19

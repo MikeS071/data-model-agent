@@ -93,6 +93,8 @@ const errorMessages: Record<string, string> = {
   'csv-confirmation-stale': 'The CSV changed after review. Reanalyse and confirm it again.',
   'csv-intake-session-expired': 'The CSV review session expired. Reanalyse the CSV.',
   'csv-masking-key-invalid': 'The CSV masking key changed. Reanalyse and confirm each CSV again.',
+  'source-too-large': 'A source file exceeds its limit. CSV files may be up to 10 MB; other source files may be up to 1 MB.',
+  'sources-too-large': 'The combined source attachments exceed the 50 MB limit. Remove or split one or more files.',
 };
 const message = (error: unknown) => error instanceof Error ? errorMessages[error.message] ?? error.message : 'Something went wrong.';
 

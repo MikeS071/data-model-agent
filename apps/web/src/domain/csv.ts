@@ -7,7 +7,7 @@ import type {
   CsvInferredType,
   CsvSampleRow,
 } from './model';
-import { MAX_SOURCE_BYTES } from './input';
+import { MAX_CSV_SOURCE_BYTES } from './input';
 
 export const CSV_ANALYSIS_VERSION = 1;
 export const MAX_CSV_ROWS = 100_000;
@@ -38,7 +38,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}
 const urlPattern = /^https?:\/\/\S+$/iu;
 
 export function decodeCsvBytes(bytes: Uint8Array): string {
-  if (bytes.byteLength > MAX_SOURCE_BYTES) throw new Error('source-too-large');
+  if (bytes.byteLength > MAX_CSV_SOURCE_BYTES) throw new Error('source-too-large');
   let content: string;
   try { content = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
   catch { throw new Error('csv-encoding-invalid'); }
@@ -136,8 +136,51 @@ function pseudonym(key: Uint8Array, value: string) {
   return `<masked:${digest}>`;
 }
 
+function validateCsvShapeBudget(content: string) {
+  let inQuotes = false;
+  let atFieldStart = true;
+  let recordHasData = false;
+  let columnCount = 1;
+  let expectedColumns: number | null = null;
+  let rowCount = 0;
+  const finishRecord = () => {
+    if (!recordHasData && columnCount === 1) return;
+    rowCount += 1;
+    if (rowCount > MAX_CSV_ROWS + 1) throw new Error('csv-rows-exceeded');
+    if (expectedColumns === null) expectedColumns = columnCount;
+    else if (columnCount !== expectedColumns) throw new Error('csv-width-inconsistent');
+  };
+  for (let index = 0; index < content.length; index += 1) {
+    const character = content[index];
+    if (inQuotes) {
+      if (character === '"' && content[index + 1] === '"') index += 1;
+      else if (character === '"') inQuotes = false;
+      continue;
+    }
+    if (character === '"' && atFieldStart) {
+      inQuotes = true;
+      recordHasData = true;
+    } else if (character === ',') {
+      columnCount += 1;
+      if (columnCount > MAX_CSV_COLUMNS) throw new Error('csv-columns-exceeded');
+      atFieldStart = true;
+      recordHasData = true;
+    } else if (character === '\n') {
+      finishRecord();
+      columnCount = 1;
+      atFieldStart = true;
+      recordHasData = false;
+    } else {
+      recordHasData = true;
+      atFieldStart = false;
+    }
+  }
+  if (recordHasData || columnCount > 1) finishRecord();
+}
+
 export function analyzeCsvContent(content: string, options: CsvAnalysisOptions): CsvAnalysis {
   let rows: string[][];
+  validateCsvShapeBudget(content);
   let parsedRows = 0;
   let parsedColumns: number | null = null;
   try {
@@ -147,7 +190,7 @@ export function analyzeCsvContent(content: string, options: CsvAnalysisOptions):
       delimiter: ',',
       relax_column_count: true,
       skip_empty_lines: true,
-      max_record_size: MAX_SOURCE_BYTES,
+      max_record_size: MAX_CSV_SOURCE_BYTES,
       on_record(record: string[]) {
         parsedRows += 1;
         if (parsedRows > MAX_CSV_ROWS + 1) throw new Error('csv-rows-exceeded');
