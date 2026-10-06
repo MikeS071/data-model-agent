@@ -212,10 +212,32 @@ export function validateCanonicalModel(value: unknown): CanonicalModel {
 
 export function parseGenerationResult(value: unknown): GenerationResult {
   const result = record(value, 'generation-result-invalid');
+  const model = structuredClone(result.model);
+  let unresolvedForeignKeys = 0;
+  if (model && typeof model === 'object' && !Array.isArray(model) && Array.isArray((model as Record<string, unknown>).entities)) {
+    for (const candidateEntity of (model as { entities: unknown[] }).entities) {
+      if (!candidateEntity || typeof candidateEntity !== 'object' || Array.isArray(candidateEntity)) continue;
+      const attributes = (candidateEntity as Record<string, unknown>).attributes;
+      if (!Array.isArray(attributes)) continue;
+      for (const candidateAttribute of attributes) {
+        if (!candidateAttribute || typeof candidateAttribute !== 'object' || Array.isArray(candidateAttribute)) continue;
+        const attribute = candidateAttribute as Record<string, unknown>;
+        if (attribute.key === 'FK' && attribute.references === null) {
+          attribute.key = 'NONE';
+          unresolvedForeignKeys += 1;
+        }
+      }
+    }
+  }
+  const warnings = Array.isArray(result.warnings) ? [...result.warnings] : result.warnings;
+  const downgradeWarning = 'Unresolved foreign-key markers without a reference target were retained as ordinary attributes.';
+  if (unresolvedForeignKeys > 0 && Array.isArray(warnings) && !warnings.includes(downgradeWarning)) {
+    warnings.push(downgradeWarning);
+  }
   return {
-    model: validateCanonicalModel(result.model),
+    model: validateCanonicalModel(model),
     assumptions: textList(result.assumptions, 'generation-assumptions-invalid'),
-    warnings: textList(result.warnings, 'generation-warnings-invalid'),
+    warnings: textList(warnings, 'generation-warnings-invalid'),
     clarificationQuestions: textList(result.clarificationQuestions, 'generation-questions-invalid'),
   };
 }

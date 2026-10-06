@@ -217,7 +217,9 @@ by the settings UI.
    columns that should be masked, then confirm it.
 3. Choose **Save model** to keep the intake without contacting the provider, or
    **Generate draft** to create the first canonical model.
-4. Follow the durable generation job's phases, elapsed time, heartbeat and provider transcript.
+4. Follow the durable generation job's phases, elapsed time, heartbeat and one-line live
+   generation updates. Raw provider JSON remains internal; the feed reports current work,
+   periodic active-request status and received-output character counts.
    The job survives page reloads; jobs still running after an application restart are marked
    interrupted and can be retried.
 5. In the model detail screen, edit the persistent requirements, attachment text, provider and

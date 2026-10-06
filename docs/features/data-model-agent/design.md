@@ -1,7 +1,7 @@
 ---
 kind: design
 version: 1
-revision: 17
+revision: 18
 status: accepted
 slug: data-model-agent
 requestRevision: 6
@@ -116,6 +116,14 @@ failed, cancelled or interrupted. The browser starts a job and polls its durable
 Reloading resumes that view. Process restart and stale heartbeat recovery mark unfinished
 work interrupted and offer an explicit retry. Partial provider output is activity only:
 one atomic save replaces the working draft after complete schema and domain validation.
+
+The visible generation transcript is a durable activity feed, not raw provider output.
+It records one-line provider phase summaries, a periodic still-active update while the
+model is reasoning without emitting text, and throttled received-character counts after
+streaming begins. Raw JSON fragments remain in the provider adapter only until parsing and
+validation; they are not persisted or rendered. The current phase marker is static rather
+than pulsing. This communicates ongoing work without presenting model chain-of-thought or
+an unreadable partial JSON document.
 
 Use Node's SQLite support behind a repository interface. One mutable working draft is
 autosaved transactionally. An explicit Save Version action creates an immutable snapshot
@@ -671,14 +679,17 @@ by reanalysis/reconfirmation.
 | D-042 | Require a verified v7 backup for rollback, add an unknown-schema guard before v8 writes and test a populated v7-to-v8 migration. | A pre-feature binary cannot be retroactively prevented from writing a newer database. | Claim older binaries can safely reuse v8; omit migration fixtures. | Rollback restores backup, future versions gain compatibility checks, and existing data preservation is proven. |
 | D-043 | Use kind-specific file limits of 1 MB for non-CSV and 10 MB for CSV with a 50 MB normalized aggregate cap. | CSV extracts need materially more capacity than prose/schema sources while the local unauthenticated parser still needs deterministic memory bounds. | Keep 1/5 MB limits; allow 25/100 MB; rely only on row/column limits. | Analysis and persistence share constants; parser-time row/column limits remain and boundary tests cover exact/over-limit values. |
 | D-044 | Decode CSV bytes by BOM, then fatal UTF-8, then Windows-1252 fallback, followed by strict control-character validation. | Real Windows/Excel exports use smart punctuation and non-breaking spaces in Windows-1252 but remain valid text. | UTF-8 only; lossy replacement decoding; arbitrary encoding detection. | Common exports are accepted deterministically, malformed BOM encodings fail, and binary/control payloads remain blocked. |
+| D-045 | Show durable one-line generation summaries and periodic activity updates while keeping raw streamed JSON internal. | Providers may emit no text during reasoning, and partial JSON is noisy and can be mistaken for validated output. | Empty window until tokens; persist raw JSON; expose model reasoning. | Users see immediate and regular progress, received character counts and static phase markers; canonical replacement still waits for full validation. |
 
 ## Approval
 
-Status: accepted. On 2026-10-06, Michal accepted design revision 17 for request revision 6
-with deterministic UTF-8/UTF-16 BOM/Windows-1252 decoding and decoded control validation
-in D-044. Size, shape, provider-bound sample and masking decisions remain unchanged.
+Status: accepted. On 2026-10-06, Michal accepted design revision 18 for request revision 6
+by explicitly requiring one-line generation summaries with regular updates and removing
+the pulsing current-step marker. D-045 keeps raw provider JSON internal while preserving
+durable progress and validated model replacement.
 
-Historical approvals: On 2026-10-02, Michal accepted design revision 16 for request
+Historical approvals: On 2026-10-06, Michal accepted design revision 17 for request
+revision 6 with common CSV decoding. On 2026-10-02, Michal accepted design revision 16 for request
 revision 5 with larger CSV limits. On 2026-10-01, Michal accepted design revision 15 for request
 revision 4 with manual-only masking. On 2026-10-01, Michal accepted design revision 14 for request
 revision 3 after implementation-readiness review, then changed the masking requirement

@@ -33,7 +33,7 @@ const generationJob = (
   id: 'job-1', projectId, status, providerSettings: testProviderSettings,
   phase: status === 'completed' ? 'completed' : status === 'running' ? 'receiving' : status,
   message: status === 'completed' ? 'Draft ready.' : status === 'running' ? 'Receiving live model output…' : `Generation ${status}.`,
-  transcript: status === 'running' ? '{"model":{"name":"Claim Payment"' : '',
+  transcript: status === 'running' ? '[2026-09-22T00:00:02.000Z] Receiving generated model output — 32 characters received.\n' : '',
   error: status === 'failed' ? 'provider-failed' : null,
   createdAt: '2026-09-22T00:00:00Z', startedAt: '2026-09-22T00:00:01Z',
   heartbeatAt: '2026-09-22T00:00:02Z', completedAt: status === 'completed' ? '2026-09-22T00:00:03Z' : null,
@@ -539,12 +539,15 @@ describe('Michal modelling workflow', () => {
     await user.click(screen.getByRole('button', { name: /Generate draft/u }));
     expect(await screen.findByRole('heading', { name: 'Building your model' })).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: 'Model generation progress' })).toBeTruthy();
+    expect(screen.getByText('Live generation updates')).toBeTruthy();
 
     expect((await screen.findByRole('status')).textContent).toBe('Receiving live model output…');
-    expect(screen.getByLabelText('Live provider transcript').textContent).toContain('"Claim Payment"');
+    expect(screen.getByLabelText('Live provider transcript').textContent).toContain('32 characters received');
     await vi.waitFor(() => expect(pollCount).toBeGreaterThan(0), { timeout: 2500 });
     current = { ...current, draft: generatedClaimPayment };
-    completePoll!(Response.json(generationJob(project.id, 'completed', { transcript: '{"model":{"name":"Claim Payment"}}' })));
+    completePoll!(Response.json(generationJob(project.id, 'completed', {
+      transcript: '[2026-09-22T00:00:03.000Z] Validating the completed model…\n',
+    })));
     expect(await screen.findByRole('heading', { name: 'Claim Payment model' }, { timeout: 2500 })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Building your model' })).toBeNull();
   });
