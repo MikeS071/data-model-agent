@@ -1,0 +1,149 @@
+import { describe, expect, it } from 'vitest';
+import {
+  analyzeCsvContent,
+  csvProviderContext,
+  decodeCsvBytes,
+  distributedSampleIndexes,
+} from '@/domain/csv';
+import { MAX_CSV_SOURCE_BYTES } from '@/domain/input';
+
+const key = new Uint8Array(32).fill(7);
+const options = { key, maskingGenerationId: 'generation-1', intakeSessionId: 'intake-1' };
+
+describe('CSV analysis boundary', () => {
+  it('decodes UTF-8, UTF-16 BOMs and Windows-1252 exports without lossy replacement', () => {
+    const utf8Bom = Uint8Array.from([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('name\nJosé\n')]);
+    expect(decodeCsvBytes(utf8Bom)).toBe('name\nJosé\n');
+
+    const utf16CodeUnits = [...'name\r\nJosé\r\n'].map(character => character.charCodeAt(0));
+    const utf16le = Uint8Array.from([0xff, 0xfe, ...utf16CodeUnits.flatMap(value => [value & 0xff, value >> 8])]);
+    const utf16be = Uint8Array.from([0xfe, 0xff, ...utf16CodeUnits.flatMap(value => [value >> 8, value & 0xff])]);
+    expect(decodeCsvBytes(utf16le)).toBe('name\nJosé\n');
+    expect(decodeCsvBytes(utf16be)).toBe('name\nJosé\n');
+
+    const windows1252 = Uint8Array.from([
+      ...new TextEncoder().encode('description\n'),
+      0x91, ...new TextEncoder().encode('UNKNOWN'), 0x92, 0x20, 0x96, 0x20,
+      ...new TextEncoder().encode('value'), 0xa0, 0x0a,
+    ]);
+    expect(decodeCsvBytes(windows1252)).toBe("description\n‘UNKNOWN’ – value\u00a0\n");
+  });
+
+  it('parses UTF-8 BOM, quoting, embedded commas, escaped quotes and line breaks', () => {
+    const content = decodeCsvBytes(new TextEncoder().encode(
+      '\ufeffclaim_id,description,amount\r\n1,"Storm, ""major""\r\ndamage",10.50\r\n2,Minor,20\r\n',
+    ));
+    const analysis = analyzeCsvContent(content, options);
+
+    expect(analysis.inferredHeaderMode).toBe('first-row');
+    expect(analysis.headers).toEqual(['claim_id', 'description', 'amount']);
+    expect(analysis.rowCount).toBe(2);
+    expect(analysis.columns.map(column => column.inferredType)).toEqual(['integer', 'string', 'decimal']);
+    expect(analysis.sampleRows[0].values[1]).toContain('Storm, "major"\ndamage');
+  });
+
+  it('requires review for headerless data and applies corrected headers on confirmation', () => {
+    const draft = analyzeCsvContent('Alice,10\nBob,20\n', options);
+    expect(draft.inferredHeaderMode).toBe('generated');
+    expect(draft.headers).toEqual(['column_1', 'column_2']);
+    expect(draft.confirmed).toBe(false);
+    expect(draft.columns.every(column => !column.sensitive && column.sensitivity.length === 0)).toBe(true);
+    expect(JSON.stringify(draft.sampleRows)).toContain('Alice');
+    expect(JSON.stringify(draft.sampleRows)).toContain('Bob');
+
+    const confirmed = analyzeCsvContent('Alice,10\nBob,20\n', {
+      ...options,
+      headerMode: 'generated',
+      headers: ['customer_name', 'balance'],
+      confirmed: true,
+      now: () => '2026-10-01T00:00:00.000Z',
+    });
+    expect(confirmed.headers).toEqual(['customer_name', 'balance']);
+    expect(confirmed.confirmedAt).toBe('2026-10-01T00:00:00.000Z');
+  });
+
+  it('uses stable project-scoped pseudonyms while preventing cross-project correlation', () => {
+    const content = 'customer_id,email,amount\n123,a@example.com,10\n123,a@example.com,20\n';
+    const first = analyzeCsvContent(content, { ...options, additionalSensitiveColumns: [0, 1], confirmed: true });
+    const sameProject = analyzeCsvContent(content, { ...options, intakeSessionId: null, additionalSensitiveColumns: [0, 1], confirmed: true });
+    const otherProject = analyzeCsvContent(content, {
+      ...options,
+      key: new Uint8Array(32).fill(9),
+      maskingGenerationId: 'generation-2',
+      additionalSensitiveColumns: [0, 1],
+      confirmed: true,
+    });
+
+    expect(first.sampleRows[0].values[0]).toBe(first.sampleRows[1].values[0]);
+    expect(first.sampleRows[0].values[1]).toBe(first.sampleRows[1].values[1]);
+    expect(sameProject.sampleRows[0].values).toEqual(first.sampleRows[0].values);
+    expect(otherProject.sampleRows[0].values[0]).not.toBe(first.sampleRows[0].values[0]);
+    expect(JSON.stringify(first)).not.toContain('a@example.com');
+    expect(csvProviderContext('customers.csv', first)).not.toContain('a@example.com');
+  });
+
+  it('profiles the complete file while keeping unsampled sentinel values out of provider context', () => {
+    const rowCount = 220;
+    const sampled = new Set(distributedSampleIndexes(rowCount));
+    const sentinelIndex = Array.from({ length: rowCount }, (_, index) => index).find(index => !sampled.has(index))!;
+    const rows = Array.from({ length: rowCount }, (_, index) => {
+      const sentinel = index === sentinelIndex;
+      return [
+        String(index + 1),
+        sentinel ? '1.5' : '1',
+        sentinel ? 'hidden@example.com' : 'ordinary',
+        sentinel ? '' : 'present',
+        sentinel ? 'different' : 'same',
+        sentinel ? 'this-is-a-deliberately-long-unsampled-value' : 'x',
+      ].join(',');
+    });
+    const content = `row_id,type_probe,format_probe,null_probe,unique_probe,length_probe\n${rows.join('\n')}\n`;
+    const analysis = analyzeCsvContent(content, { ...options, confirmed: true });
+    const byName = Object.fromEntries(analysis.columns.map(column => [column.name, column]));
+    const providerContext = csvProviderContext('profile.csv', analysis);
+
+    expect(analysis.sampleRows).toHaveLength(100);
+    expect(byName.type_probe.inferredType).toBe('decimal');
+    expect(byName.format_probe.formats).toContain('email');
+    expect(byName.null_probe.nullRatio).toBeGreaterThan(0);
+    expect(byName.unique_probe.uniqueRatio).toBeGreaterThan(1 / rowCount);
+    expect(byName.length_probe.maxLength).toBeGreaterThan(20);
+    expect(providerContext).not.toContain('hidden@example.com');
+    expect(providerContext).not.toContain('this-is-a-deliberately-long-unsampled-value');
+  });
+
+  it('rejects invalid encoding, malformed input, inconsistent widths and invalid headers', () => {
+    expect(() => decodeCsvBytes(Uint8Array.from([0xff, 0xfe, 0x61]))).toThrow('csv-encoding-invalid');
+    expect(() => decodeCsvBytes(Uint8Array.from([0x61, 0x00, 0x62]))).toThrow('source-binary');
+    expect(() => decodeCsvBytes(Uint8Array.from([0x81]))).toThrow('source-binary');
+    expect(() => analyzeCsvContent('value\nunsafe\u0001text\n', options)).toThrow('source-binary');
+    expect(() => analyzeCsvContent('a,b\n"unterminated,1\n', options)).toThrow('csv-malformed');
+    expect(() => analyzeCsvContent('a,b\n1\n', options)).toThrow('csv-width-inconsistent');
+    expect(() => analyzeCsvContent('a,b\n1,2\n', { ...options, headers: ['same', 'same'] })).toThrow('csv-header-invalid');
+    expect(() => analyzeCsvContent(`${Array.from({ length: 251 }, (_, index) => `c${index}`).join(',')}\n${Array(251).fill('1').join(',')}\n`, options))
+      .toThrow('csv-columns-exceeded');
+    expect(() => analyzeCsvContent(','.repeat(1_000_000), options)).toThrow('csv-columns-exceeded');
+    expect(() => analyzeCsvContent(`value\n${'1\n'.repeat(100_001)}`, options)).toThrow('csv-rows-exceeded');
+    expect(() => analyzeCsvContent(`value\n${' \n'.repeat(100_001)}`, options)).toThrow('csv-rows-exceeded');
+    expect(() => analyzeCsvContent('a,b\n \n', options)).toThrow('csv-width-inconsistent');
+  });
+
+  it('accepts a CSV at 10 MB and rejects one byte over before decoding', () => {
+    expect(decodeCsvBytes(new Uint8Array(MAX_CSV_SOURCE_BYTES).fill(120))).toHaveLength(MAX_CSV_SOURCE_BYTES);
+    expect(() => decodeCsvBytes(new Uint8Array(MAX_CSV_SOURCE_BYTES + 1))).toThrow('source-too-large');
+  });
+
+  it('enforces the 10 MB canonical UTF-8 limit after legacy and UTF-16 decoding', () => {
+    const expandingWindows1252 = new Uint8Array(3_400_000).fill(0x91);
+    expect(() => decodeCsvBytes(expandingWindows1252)).toThrow('source-too-large');
+
+    const codePoint = 0x0800;
+    const utf16le = new Uint8Array(2 + 3_400_000 * 2);
+    utf16le.set([0xff, 0xfe]);
+    for (let offset = 2; offset < utf16le.length; offset += 2) {
+      utf16le[offset] = codePoint & 0xff;
+      utf16le[offset + 1] = codePoint >> 8;
+    }
+    expect(() => decodeCsvBytes(utf16le)).toThrow('source-too-large');
+  });
+});

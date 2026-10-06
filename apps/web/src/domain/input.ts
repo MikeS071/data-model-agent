@@ -1,8 +1,9 @@
 import type { SourceArtifactInput, SourceKind } from './model';
 
-export const MAX_SOURCE_BYTES = 1_000_000;
-export const MAX_TOTAL_SOURCE_BYTES = 5_000_000;
-const kinds = new Set<SourceKind>(['text', 'markdown', 'sql', 'ddl', 'json']);
+export const MAX_NON_CSV_SOURCE_BYTES = 1_000_000;
+export const MAX_CSV_SOURCE_BYTES = 10_000_000;
+export const MAX_TOTAL_SOURCE_BYTES = 50_000_000;
+const kinds = new Set<SourceKind>(['text', 'markdown', 'sql', 'ddl', 'json', 'csv']);
 
 export function normalizeSourceArtifacts(sources: SourceArtifactInput[]): SourceArtifactInput[] {
   if (!Array.isArray(sources)) throw new Error('sources-invalid');
@@ -13,9 +14,16 @@ export function normalizeSourceArtifacts(sources: SourceArtifactInput[]): Source
     if (source.content.includes('\0')) throw new Error('source-binary');
     const content = source.content.replace(/\r\n?/gu, '\n');
     const bytes = Buffer.byteLength(content, 'utf8');
-    if (bytes > MAX_SOURCE_BYTES) throw new Error('source-too-large');
+    const maximum = source.kind === 'csv' ? MAX_CSV_SOURCE_BYTES : MAX_NON_CSV_SOURCE_BYTES;
+    if (bytes > maximum) throw new Error('source-too-large');
     total += bytes;
     if (total > MAX_TOTAL_SOURCE_BYTES) throw new Error('sources-too-large');
-    return { name: source.name.trim(), kind: source.kind, content };
+    if (source.kind !== 'csv' && source.csvAnalysis != null) throw new Error('source-invalid');
+    return {
+      name: source.name,
+      kind: source.kind,
+      content,
+      ...(source.kind === 'csv' ? { csvAnalysis: source.csvAnalysis ?? null } : {}),
+    };
   });
 }
