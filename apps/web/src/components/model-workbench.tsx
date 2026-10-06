@@ -78,6 +78,7 @@ const errorMessages: Record<string, string> = {
   'generation-in-progress': 'A generation job is already running for this project.',
   'generation-interrupted': 'Generation was interrupted when the application stopped. Retry to start a new job.',
   'generation-cancelled': 'Generation was cancelled.',
+  'generation-result-invalid': 'The provider produced a complete response that did not pass model validation. Review the generation updates and retry.',
   'clipboard-image-unavailable': 'Image copy is unavailable in this browser. Use Export PDF instead.',
   'model-export-failed': 'The model could not be exported. Retry after the diagram finishes rendering.',
   'csv-encoding-invalid': 'The CSV text encoding is unsupported or malformed. Use UTF-8, BOM-marked UTF-16, or Windows-1252.',
@@ -206,6 +207,7 @@ const ProviderActivityPanel = memo(function ProviderActivityPanel({
   const heartbeatAge = activity.heartbeatAt
     ? Math.max(0, Math.floor((Date.now() - Date.parse(activity.heartbeatAt)) / 1000))
     : null;
+  const activityUpdates = activity.transcript.split('\n').filter(line => line.trim()).length;
   useEffect(() => {
     const update = () => setElapsedSeconds(Math.max(0, Math.floor((Date.now() - activity.startedAt) / 1000)));
     update();
@@ -229,8 +231,8 @@ const ProviderActivityPanel = memo(function ProviderActivityPanel({
       </li>)}
     </ol>
     <details className="activity-transcript" open>
-      <summary>Live provider output <span>{activity.transcript.length.toLocaleString()} characters</span></summary>
-      <pre ref={transcript} role="log" aria-live="off" aria-label="Live provider transcript">{activity.transcript || 'Waiting for the provider to begin streaming output…'}</pre>
+      <summary>Live generation updates <span>{activityUpdates.toLocaleString()} updates</span></summary>
+      <pre ref={transcript} role="log" aria-live="off" aria-label="Live provider transcript">{activity.transcript || 'Starting the provider request…'}</pre>
     </details>
     <div className="activity-footer"><p className="activity-safety">The working model is replaced only after the complete response passes schema and domain validation.</p>
       {activity.active && onCancel && <button className="secondary-button" type="button" onClick={onCancel}>Cancel generation</button>}

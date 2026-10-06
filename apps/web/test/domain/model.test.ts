@@ -38,4 +38,19 @@ describe('canonical model boundary', () => {
     expect(actual.warnings).toEqual(['Relationship cardinality was not supplied.']);
     expect(actual.clarificationQuestions).toEqual(['How many claims can one payment settle?']);
   });
+
+  it('downgrades unresolved provider FK markers without inventing a target', () => {
+    const candidate = structuredClone(generatedClaimPayment);
+    candidate.model.entities[1].attributes[1].key = 'FK';
+    candidate.model.entities[1].attributes[1].references = null;
+
+    const actual = parseGenerationResult(candidate);
+    expect(actual.model.entities[1].attributes[1]).toEqual(expect.objectContaining({
+      key: 'NONE',
+      references: null,
+    }));
+    expect(actual.warnings).toContain(
+      'Unresolved foreign-key markers without a reference target were retained as ordinary attributes.',
+    );
+  });
 });
