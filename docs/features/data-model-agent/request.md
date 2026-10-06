@@ -1,7 +1,7 @@
 ---
 kind: request
 version: 1
-revision: 5
+revision: 6
 status: accepted
 slug: data-model-agent
 ---
@@ -40,6 +40,7 @@ Direct user guided intake.
 - Inputs may contain sensitive organisational information and may be stored and retrieved.
 - The local VS Code extension host is already authenticated to GitHub Copilot by the user.
 - CSV input uses text-based comma-separated files; spreadsheet workbooks are not CSV.
+  Common exports encoded as UTF-8, BOM-marked UTF-16 or Windows-1252 are supported.
 - A CSV may not have an obvious header row, so the application may infer candidate
   headers but the user confirms or corrects them before provider use.
 - CSV samples are unmasked by default. The user is responsible for marking sensitive
@@ -99,12 +100,14 @@ user-marked columns and absence of complete raw file content or unsampled sentin
 
 **Outcome:** Malformed, binary, unsupported-encoding, inconsistent-width or oversized CSV
 input fails before provider access with a specific correction message. A valid CSV
-supports quoted fields, embedded commas, escaped quotes, embedded line breaks and an
-optional UTF-8 byte-order mark. Valid CSVs up to 10 MB each and aggregate attachments up
-to 50 MB are accepted while row/column parser limits still apply.
+supports quoted fields, embedded commas, escaped quotes, embedded line breaks, UTF-8,
+BOM-marked UTF-16LE/BE and Windows-1252. Files containing NUL bytes or unsafe C0/C1
+control characters are rejected as binary/unsafe text. Valid CSVs up to 10 MB each and
+aggregate attachments up to 50 MB are accepted while row/column parser limits still apply.
 
 **Proof:** Run parser and boundary tests covering each valid quoting case and each typed
-failure, exact 10 MB/50 MB boundaries and one-byte-over failures, then assert the fake
+failure, Windows-1252 smart quotes/dashes/non-breaking spaces, UTF-16 BOMs, unsafe control
+bytes, exact 10 MB/50 MB boundaries and one-byte-over failures, then assert the fake
 provider was not called for rejected input.
 
 ### CSV-RETRIEVE-REGENERATE
@@ -238,6 +241,6 @@ build and UI checks introduced by the implementation.
 
 ## Approval
 
-Status: accepted. On 2026-10-02, Michal accepted revision 5 with CSV capacity of 10 MB per
-file and 50 MB across all attachments, retaining 1 MB per non-CSV file and the existing
-parser-time row and column ceilings.
+Status: accepted. On 2026-10-06, Michal accepted revision 6 supporting common
+Windows/Excel CSV encodings—UTF-8, BOM-marked UTF-16 and Windows-1252—while retaining
+binary/control-character rejection, size limits and parser shape safeguards.
