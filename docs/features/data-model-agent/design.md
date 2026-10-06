@@ -1,10 +1,10 @@
 ---
 kind: design
 version: 1
-revision: 16
+revision: 17
 status: accepted
 slug: data-model-agent
-requestRevision: 5
+requestRevision: 6
 ---
 
 # Data-modelling agent design
@@ -42,7 +42,8 @@ destination when the global default changes.
 Add `csv` to `SourceKind`, but keep the original CSV content local and distinct from its
 provider-safe analysis. A server-only CSV analyser uses the maintained `csv-parse`
 library in strict record-width mode. It accepts UTF-8 with an optional byte-order mark,
-RFC-style quoted fields, escaped quotes, embedded commas and embedded line breaks.
+UTF-16LE/BE with a byte-order mark, or Windows-1252 fallback, plus RFC-style quoted
+fields, escaped quotes, embedded commas and embedded line breaks.
 Non-CSV source kinds retain a 1 MB per-file limit. CSV uses a dedicated 10 MB per-file
 limit, and normalized content across every attachment is capped at 50 MB. Parser-time row
 and column ceilings bound CSV work before profiling even when the byte limit permits a
@@ -409,9 +410,12 @@ record-size ceiling uses that value while `on_record` still aborts excessive row
 columns or inconsistent widths during parsing.
 
 The browser sends CSV bytes to `POST /api/csv-analysis` as multipart data rather than
-decoding them with `File.text()`. The server performs fatal UTF-8 decoding, strips an
-optional BOM, parses with explicit comma delimiter and strict column counts, applies row/
-column ceilings, profiles and masks, and returns a bounded review DTO. The route stores
+decoding them with `File.text()`. The server selects encoding deterministically: strip and
+decode UTF-8/UTF-16LE/UTF-16BE BOMs; otherwise attempt fatal UTF-8; if that fails, decode
+Windows-1252. It then rejects NUL plus unsafe C0/C1 controls (allowing tab, LF and CR),
+normalizes line endings, parses with explicit comma delimiter and strict column counts,
+applies row/column ceilings, profiles and masks, and returns a bounded review DTO. The
+route stores
 no CSV content or analysis; before project creation it persists only the expiring intake
 session key/generation record. Project create/update accepts the original normalized CSV,
 intake-session ID when applicable, and a confirmation claim; it recomputes the canonical
@@ -519,6 +523,9 @@ older job snapshot audit-only.
 `source-too-large` identifies a source exceeding its kind-specific limit, while
 `sources-too-large` identifies aggregate normalized attachment bytes above 50 MB. The UI
 explains both limits and remains editable after rejection so users can remove/split files.
+`csv-encoding-invalid` is reserved for BOM/decoder failures such as malformed UTF-16;
+Windows-1252 fallback is not an error. `source-binary` covers NUL and unsafe decoded
+controls regardless of encoding.
 
 Malformed or schema-invalid model output is never stored as a canonical model; validation
 details become a bounded error and may drive a new generation attempt. Domain ambiguity
@@ -535,7 +542,8 @@ Domain unit tests compare the canonical Claim-Payment fixture with literal expec
 entities, attributes, keys, optionality, cardinality, definitions, layout and aggregate
 rules. Input tests cover prose, Markdown, DDL, SQL, JSON, encoding, size limits and the
 rule that DDL is never executed. CSV parser tests cover BOM, quoting, embedded delimiters/
-newlines, escaped quotes, malformed input, strict widths, encoding and resource limits.
+newlines, escaped quotes, malformed input, strict widths, UTF-8, UTF-16LE/BE,
+Windows-1252 smart quotes/dashes/non-breaking spaces, unsafe controls and resource limits.
 Boundary tests accept exact 1 MB non-CSV, 10 MB CSV and 50 MB aggregate inputs and reject
 each at one byte over. Multipart analysis and project save use the same byte fixtures so
 no route can apply a different CSV limit.
@@ -662,15 +670,16 @@ by reanalysis/reconfirmation.
 | D-041 | Bind every analysis/confirmation to a masking-key generation, lazily initialize only a project's first key, and invalidate all CSV confirmations on rotation/loss. | Mixing pseudonym namespaces silently destroys cross-file equality, while migrated projects need a defined first-use path. | Backfill every project; bind only source/analysis version; regenerate missing keys silently. | First use is transactional only with no CSV state; rotation is transactional, missing keys with existing state block provider context, and reconfirmation is mandatory. |
 | D-042 | Require a verified v7 backup for rollback, add an unknown-schema guard before v8 writes and test a populated v7-to-v8 migration. | A pre-feature binary cannot be retroactively prevented from writing a newer database. | Claim older binaries can safely reuse v8; omit migration fixtures. | Rollback restores backup, future versions gain compatibility checks, and existing data preservation is proven. |
 | D-043 | Use kind-specific file limits of 1 MB for non-CSV and 10 MB for CSV with a 50 MB normalized aggregate cap. | CSV extracts need materially more capacity than prose/schema sources while the local unauthenticated parser still needs deterministic memory bounds. | Keep 1/5 MB limits; allow 25/100 MB; rely only on row/column limits. | Analysis and persistence share constants; parser-time row/column limits remain and boundary tests cover exact/over-limit values. |
+| D-044 | Decode CSV bytes by BOM, then fatal UTF-8, then Windows-1252 fallback, followed by strict control-character validation. | Real Windows/Excel exports use smart punctuation and non-breaking spaces in Windows-1252 but remain valid text. | UTF-8 only; lossy replacement decoding; arbitrary encoding detection. | Common exports are accepted deterministically, malformed BOM encodings fail, and binary/control payloads remain blocked. |
 
 ## Approval
 
-Status: accepted. On 2026-10-02, Michal accepted design revision 16 for request revision 5
-with a 10 MB CSV file limit, 1 MB non-CSV file limit and 50 MB normalized aggregate limit
-in D-043. Parser-time row/column ceilings and every other accepted CSV decision remain
-unchanged.
+Status: accepted. On 2026-10-06, Michal accepted design revision 17 for request revision 6
+with deterministic UTF-8/UTF-16 BOM/Windows-1252 decoding and decoded control validation
+in D-044. Size, shape, provider-bound sample and masking decisions remain unchanged.
 
-Historical approvals: On 2026-10-01, Michal accepted design revision 15 for request
+Historical approvals: On 2026-10-02, Michal accepted design revision 16 for request
+revision 5 with larger CSV limits. On 2026-10-01, Michal accepted design revision 15 for request
 revision 4 with manual-only masking. On 2026-10-01, Michal accepted design revision 14 for request
 revision 3 after implementation-readiness review, then changed the masking requirement
 after automatic classification proved too broad. On 2026-10-01, Michal accepted design revision 13 for request
