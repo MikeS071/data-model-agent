@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -145,6 +146,25 @@ describe('model application service', () => {
     });
     expect(updated.sources[0].csvAnalysis?.confirmed).toBe(false);
     expect(() => service.prepareGeneration(project.id)).toThrow('csv-confirmation-required');
+    repository.close();
+  });
+
+  it('rejects unsafe decoded CSV controls when project JSON is persisted', () => {
+    const { repository, service } = harness();
+    const unsafeContent = 'customer_id,name\n1,Alice\u0001Admin\n';
+    const intake = service.analyzeCsv({ bytes: new TextEncoder().encode('customer_id,name\n1,Alice\n') });
+    const analysis = {
+      ...intake.analysis,
+      contentDigest: createHash('sha256').update(unsafeContent).digest('hex'),
+      confirmed: true,
+      confirmedAt: '2026-10-06T00:00:00.000Z',
+    };
+    expect(() => service.createProject({
+      title: 'Unsafe CSV',
+      requirements: 'Reject unsafe controls.',
+      sources: [{ name: 'unsafe.csv', kind: 'csv', content: unsafeContent, csvAnalysis: analysis }],
+    })).toThrow('source-binary');
+    expect(repository.listProjects()).toEqual([]);
     repository.close();
   });
 });

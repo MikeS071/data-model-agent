@@ -11,6 +11,24 @@ const key = new Uint8Array(32).fill(7);
 const options = { key, maskingGenerationId: 'generation-1', intakeSessionId: 'intake-1' };
 
 describe('CSV analysis boundary', () => {
+  it('decodes UTF-8, UTF-16 BOMs and Windows-1252 exports without lossy replacement', () => {
+    const utf8Bom = Uint8Array.from([0xef, 0xbb, 0xbf, ...new TextEncoder().encode('name\nJosé\n')]);
+    expect(decodeCsvBytes(utf8Bom)).toBe('name\nJosé\n');
+
+    const utf16CodeUnits = [...'name\r\nJosé\r\n'].map(character => character.charCodeAt(0));
+    const utf16le = Uint8Array.from([0xff, 0xfe, ...utf16CodeUnits.flatMap(value => [value & 0xff, value >> 8])]);
+    const utf16be = Uint8Array.from([0xfe, 0xff, ...utf16CodeUnits.flatMap(value => [value >> 8, value & 0xff])]);
+    expect(decodeCsvBytes(utf16le)).toBe('name\nJosé\n');
+    expect(decodeCsvBytes(utf16be)).toBe('name\nJosé\n');
+
+    const windows1252 = Uint8Array.from([
+      ...new TextEncoder().encode('description\n'),
+      0x91, ...new TextEncoder().encode('UNKNOWN'), 0x92, 0x20, 0x96, 0x20,
+      ...new TextEncoder().encode('value'), 0xa0, 0x0a,
+    ]);
+    expect(decodeCsvBytes(windows1252)).toBe("description\n‘UNKNOWN’ – value\u00a0\n");
+  });
+
   it('parses UTF-8 BOM, quoting, embedded commas, escaped quotes and line breaks', () => {
     const content = decodeCsvBytes(new TextEncoder().encode(
       '\ufeffclaim_id,description,amount\r\n1,"Storm, ""major""\r\ndamage",10.50\r\n2,Minor,20\r\n',
@@ -95,7 +113,10 @@ describe('CSV analysis boundary', () => {
   });
 
   it('rejects invalid encoding, malformed input, inconsistent widths and invalid headers', () => {
-    expect(() => decodeCsvBytes(Uint8Array.from([0xff, 0xfe]))).toThrow('csv-encoding-invalid');
+    expect(() => decodeCsvBytes(Uint8Array.from([0xff, 0xfe, 0x61]))).toThrow('csv-encoding-invalid');
+    expect(() => decodeCsvBytes(Uint8Array.from([0x61, 0x00, 0x62]))).toThrow('source-binary');
+    expect(() => decodeCsvBytes(Uint8Array.from([0x81]))).toThrow('source-binary');
+    expect(() => analyzeCsvContent('value\nunsafe\u0001text\n', options)).toThrow('source-binary');
     expect(() => analyzeCsvContent('a,b\n"unterminated,1\n', options)).toThrow('csv-malformed');
     expect(() => analyzeCsvContent('a,b\n1\n', options)).toThrow('csv-width-inconsistent');
     expect(() => analyzeCsvContent('a,b\n1,2\n', { ...options, headers: ['same', 'same'] })).toThrow('csv-header-invalid');
@@ -110,5 +131,19 @@ describe('CSV analysis boundary', () => {
   it('accepts a CSV at 10 MB and rejects one byte over before decoding', () => {
     expect(decodeCsvBytes(new Uint8Array(MAX_CSV_SOURCE_BYTES).fill(120))).toHaveLength(MAX_CSV_SOURCE_BYTES);
     expect(() => decodeCsvBytes(new Uint8Array(MAX_CSV_SOURCE_BYTES + 1))).toThrow('source-too-large');
+  });
+
+  it('enforces the 10 MB canonical UTF-8 limit after legacy and UTF-16 decoding', () => {
+    const expandingWindows1252 = new Uint8Array(3_400_000).fill(0x91);
+    expect(() => decodeCsvBytes(expandingWindows1252)).toThrow('source-too-large');
+
+    const codePoint = 0x0800;
+    const utf16le = new Uint8Array(2 + 3_400_000 * 2);
+    utf16le.set([0xff, 0xfe]);
+    for (let offset = 2; offset < utf16le.length; offset += 2) {
+      utf16le[offset] = codePoint & 0xff;
+      utf16le[offset + 1] = codePoint >> 8;
+    }
+    expect(() => decodeCsvBytes(utf16le)).toThrow('source-too-large');
   });
 });

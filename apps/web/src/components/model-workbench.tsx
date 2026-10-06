@@ -80,7 +80,7 @@ const errorMessages: Record<string, string> = {
   'generation-cancelled': 'Generation was cancelled.',
   'clipboard-image-unavailable': 'Image copy is unavailable in this browser. Use Export PDF instead.',
   'model-export-failed': 'The model could not be exported. Retry after the diagram finishes rendering.',
-  'csv-encoding-invalid': 'CSV files must be valid UTF-8 text.',
+  'csv-encoding-invalid': 'The CSV text encoding is unsupported or malformed. Use UTF-8, BOM-marked UTF-16, or Windows-1252.',
   'csv-malformed': 'The CSV could not be parsed. Check quoting, commas and embedded line breaks.',
   'csv-empty': 'The CSV must contain at least one data row.',
   'csv-columns-exceeded': 'The CSV has too many columns.',

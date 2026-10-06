@@ -71,6 +71,10 @@ CSV files may be up to 10 MB each. Other source files remain limited to 1 MB eac
 normalized content across all attachments is limited to 50 MB. CSV row and column limits
 still apply independently of file size.
 
+CSV decoding supports UTF-8, BOM-marked UTF-16LE/BE and Windows-1252 exports commonly
+produced by Windows and Excel. NUL bytes and unsafe control characters remain blocked as
+binary/unsafe input.
+
 ## Technology
 
 - Next.js 16 and React 19

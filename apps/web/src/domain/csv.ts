@@ -25,6 +25,11 @@ export interface CsvAnalysisOptions {
   now?: () => string;
 }
 
+export function validateCsvText(content: string) {
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(content)) throw new Error('source-binary');
+  return content;
+}
+
 const normalizedName = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/gu, '_').replace(/^_|_$/gu, '');
 const nonEmpty = (value: string) => value.trim().length > 0;
 const booleanPattern = /^(?:true|false|yes|no|y|n)$/iu;
@@ -40,11 +45,21 @@ const urlPattern = /^https?:\/\/\S+$/iu;
 export function decodeCsvBytes(bytes: Uint8Array): string {
   if (bytes.byteLength > MAX_CSV_SOURCE_BYTES) throw new Error('source-too-large');
   let content: string;
-  try { content = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
-  catch { throw new Error('csv-encoding-invalid'); }
-  if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
-  if (content.includes('\0')) throw new Error('source-binary');
-  return content.replace(/\r\n?/gu, '\n');
+  try {
+    if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+      content = new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(3));
+    } else if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+      content = new TextDecoder('utf-16le', { fatal: true }).decode(bytes.subarray(2));
+    } else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+      content = new TextDecoder('utf-16be', { fatal: true }).decode(bytes.subarray(2));
+    } else {
+      try { content = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+      catch { content = new TextDecoder('windows-1252', { fatal: true }).decode(bytes); }
+    }
+  } catch { throw new Error('csv-encoding-invalid'); }
+  const normalized = validateCsvText(content).replace(/\r\n?/gu, '\n');
+  if (Buffer.byteLength(normalized, 'utf8') > MAX_CSV_SOURCE_BYTES) throw new Error('source-too-large');
+  return normalized;
 }
 
 function valueType(value: string): CsvInferredType {
@@ -181,6 +196,7 @@ function validateCsvShapeBudget(content: string) {
 
 export function analyzeCsvContent(content: string, options: CsvAnalysisOptions): CsvAnalysis {
   let rows: string[][];
+  validateCsvText(content);
   validateCsvShapeBudget(content);
   let parsedRows = 0;
   let parsedColumns: number | null = null;
